@@ -4,7 +4,12 @@ set -e
 # Bashio из base
 LOG_LEVEL=$(bashio::config 'log_level')
 bashio::log.level "$LOG_LEVEL"
-bashio::log.info "SSL Sync v1.6.0 starting (log level: $LOG_LEVEL)..."
+bashio::log.info "SSL Sync v1.7.0 starting (log level: $LOG_LEVEL)..."
+
+# Timezone (для локальных timestamps в log/date)
+TZ=$(bashio::config 'timezone')
+export TZ
+bashio::log.info "Timezone set to $TZ (local time: $(date))"
 
 # Trap TERM от s6 (graceful)
 trap 'bashio::log.info "Graceful stop"; exit 0' TERM INT
@@ -22,7 +27,7 @@ bashio::log.info "Config: ${SRC_DIR} -> ${DEST_DIR} (interval: ${INTERVAL}s)"
 
 # Daemon loop (long-running для s6)
 while true; do
-  bashio::log.info "=== Sync cycle ==="
+  bashio::log.info "=== Sync cycle (local: $(date)) ==="
   if [ ! -d "${SRC_DIR}" ]; then
     bashio::log.warning "Source missing: ${SRC_DIR}"
     ls -la /addon_configs/ 2>/dev/null || bashio::log.warning "Mount failed"
