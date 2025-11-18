@@ -1,4 +1,4 @@
-#!/command/with-contenv bash
-# Обратите внимание: /command/, а не /usr/bin/
-
+#!/usr/bin/with-contenv bash
+# Фикс s6: simple exec, no set -e, exec 2>&1 для логов
+exec 2>&1
 exec /run.sh
