@@ -1,3 +1,0 @@
-#!/bin/bash
-bashio::log.info "Service stopped (code: $1, signal: $2)"
-exit 0
