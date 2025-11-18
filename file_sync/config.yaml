@@ -23,10 +23,17 @@ options:
   source_relative_path: "a0d7b954_nginxproxymanager/letsencrypt/live/npm-8"
   dest_relative_path: "nginxproxymanager/live/npm-1"
   interval_seconds: 300
-  log_level: info  # Новый: debug/info/warning/error
+  log_level: info
+
 schema:
   source_relative_path: "str"
   dest_relative_path: "str"
   interval_seconds: "int(60,3600)"
-  log_level: "select(info, debug, warning, error)"  # UI-меню в Configure
-  
+  log_level:
+    type: select
+    options:
+      - info
+      - debug
+      - warning
+      - error
+      
