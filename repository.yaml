@@ -5,6 +5,6 @@ addons:
   - name: File Sync SSL
     slug: file_sync
     description: Sync SSL certificates from NPM to Asterisk
-    version: "1.7.0"
+    version: "1.7.1"
     url: https://github.com/it16122512/Add-ons/file_sync
     
