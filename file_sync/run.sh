@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 set -e
 
-# Bashio (из base)
-bashio::log.level "INFO"
-bashio::log.info "SSL Sync v1.5.0 starting..."
+# Bashio из base
+LOG_LEVEL=$(bashio::config 'log_level')
+bashio::log.level "$LOG_LEVEL"
+bashio::log.info "SSL Sync v1.6.0 starting (log level: $LOG_LEVEL)..."
 
 # Trap TERM от s6 (graceful)
 trap 'bashio::log.info "Graceful stop"; exit 0' TERM INT
