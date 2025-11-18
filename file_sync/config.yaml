@@ -23,14 +23,14 @@ options:
   source_relative_path: "a0d7b954_nginxproxymanager/letsencrypt/live/npm-8"
   dest_relative_path: "nginxproxymanager/live/npm-1"
   interval_seconds: 300
-  advanced_mode: false  # Toggle: "Показать неиспользуемые дополнительные параметры конфигурации" (как в Filebrowser)
-  log_level: info       # Default для select
-  timezone: Etc/UTC+3   # Default как в Firefox (используется для date/log timestamps)
+  advanced_mode: false
+  log_level: info
+  timezone: Etc/UTC+3
 schema:
   source_relative_path: "str"
   dest_relative_path: "str"
   interval_seconds: "int(60,3600)"
-  advanced_mode: "bool"  # Слайдер toggle
-  log_level: "select(info, debug, warning, error) advanced"  # Скрыто за toggle, UI-меню
-  timezone: "str? advanced"  # Скрыто за toggle, default Etc/UTC+3
+  advanced_mode: "bool"
+  log_level: "select(info, debug, warning, error) advanced"
+  timezone: "str? advanced"
   
