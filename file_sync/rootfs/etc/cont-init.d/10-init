@@ -1,0 +1,7 @@
+#!/usr/bin/with-contenv bash
+# однократные действия перед запуском служб
+echo "cont-init.d: create necessary folders and check mounts"
+SRC_REL="${OPTION_SOURCE_RELATIVE_PATH:-a0d7b954_nginxproxymanager/letsencrypt/live/npm-8}"
+DEST_REL="${OPTION_DEST_RELATIVE_PATH:-nginxproxymanager/live/npm-1}"
+mkdir -p "/ssl/$DEST_REL" || true
+# другие проверки можно добавить тут
