@@ -1,3 +1,4 @@
 #!/usr/bin/with-contenv bash
 exec 2>&1
-exec /usr/local/bin/run.sh  # <-- Здесь /usr/local/bin/, не /root/!
+exec /run.sh
+
