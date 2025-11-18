@@ -1,14 +1,13 @@
 #!/usr/bin/with-contenv bash
 set -e
 
-# Bashio
 bashio::log.level "INFO"
-bashio::log.info "SSL Sync v1.3.0 starting..."
+bashio::log.info "SSL Sync v1.4.1 starting..."
 
-# Trap SIGTERM от s6
+# Обработка сигналов от s6
 trap 'bashio::log.info "Graceful stop"; exit 0' TERM INT
 
-# Config via bashio
+# Конфигурация
 SRC_REL=$(bashio::config 'source_relative_path')
 DEST_REL=$(bashio::config 'dest_relative_path')
 INTERVAL=$(bashio::config 'interval_seconds')
@@ -20,7 +19,7 @@ DEST_DIR="${DEST_ROOT}/${DEST_REL}"
 
 bashio::log.info "Config: ${SRC_DIR} -> ${DEST_DIR} (interval: ${INTERVAL}s)"
 
-# Цикл daemon
+# Основной цикл
 while true; do
   bashio::log.info "=== Sync cycle ==="
 
@@ -48,6 +47,7 @@ while true; do
     fi
   done
 
+  # Перезапуск Asterisk при изменениях
   if [ "${CHANGED}" = true ]; then
     TOKEN=$(bashio::supervisor_token)
     ADDON_ID="b35499aa_asterisk"
