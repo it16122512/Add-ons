@@ -1,17 +1,19 @@
-# Нет ARG BUILD_FROM — HA auto-detect из config.yaml
+# ← ОБЯЗАТЕЛЬНО! Без этой строки сборка падает в 2025.11
+ARG BUILD_FROM
 FROM $BUILD_FROM
 
-# Установка утилит (diffutils для cmp)
-RUN apk add --no-cache bash curl diffutils
+# Пакеты
+RUN apk add --no-cache curl coreutils
 
-# Bashio (попробуйте; если 403 — см. ниже)
-COPY --from=ghcr.io/hassio-addons/bashio:15 /bashio /usr/bin/bashio
-RUN chmod a+x /usr/bin/bashio
-
-# Копируем rootfs и run.sh (удалите services.d из rootfs/ для consistency)
+# Копируем файлы
 COPY rootfs/ /
 COPY run.sh /run.sh
-RUN chmod a+x /run.sh /etc/cont-init.d/10-init
 
-# Основной процесс (PID 1)
-CMD ["/run.sh"]
+# Права на исполнение
+RUN chmod a+x /run.sh \
+    /etc/cont-init.d/10-init \
+    /etc/services.d/file_sync/run \
+    /etc/services.d/file_sync/finish
+
+# s6-overlay как PID 1 (startup: services)
+ENTRYPOINT ["/init"]
