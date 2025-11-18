@@ -11,7 +11,7 @@ arch:
 
 # startup: application + init: false — полностью убирает s6-overlay и все suexec ошибки
 startup: application
-init: false
+init: true
 boot: auto
 
 hassio_api: true
