@@ -1,4 +1,5 @@
 #!/usr/bin/with-contenv bash
 bashio::log.info "Init: Setup dirs"
+
 DEST_REL=$(bashio::config 'dest_relative_path')
 mkdir -p "/ssl/${DEST_REL}" || true
