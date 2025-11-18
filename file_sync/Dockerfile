@@ -1,17 +1,17 @@
-ARG BUILD_FROM
+# Нет ARG BUILD_FROM — HA auto-detect из config.yaml
 FROM $BUILD_FROM
 
-# Установка утилит
-RUN apk add --no-cache bash curl coreutils
+# Установка утилит (diffutils для cmp)
+RUN apk add --no-cache bash curl diffutils
 
-# Bashio для HA add-on
+# Bashio (попробуйте; если 403 — см. ниже)
 COPY --from=ghcr.io/hassio-addons/bashio:15 /bashio /usr/bin/bashio
 RUN chmod a+x /usr/bin/bashio
 
-# Копируем rootfs и run.sh
+# Копируем rootfs и run.sh (удалите services.d из rootfs/ для consistency)
 COPY rootfs/ /
 COPY run.sh /run.sh
-RUN chmod a+x /run.sh /etc/cont-init.d/10-init /etc/services.d/ssl_sync/run /etc/services.d/ssl_sync/finish
+RUN chmod a+x /run.sh /etc/cont-init.d/10-init
 
-# Основной процесс
-CMD [ "/run.sh" ]
+# Основной процесс (PID 1)
+CMD ["/run.sh"]
