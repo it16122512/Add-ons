@@ -29,5 +29,5 @@ jobs:
             ghcr.io/it16122512/addons/file_sync:1.7.0
             ghcr.io/it16122512/addons/file_sync:latest
           build-args: |
-            BUILD_VERSION=1.7.0
+            BUILD_VERSION=1.7.1
             BUILD_ARCH=amd64,aarch64,armv7
