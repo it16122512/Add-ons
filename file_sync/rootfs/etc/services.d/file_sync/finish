@@ -1,0 +1,3 @@
+#!/bin/bash
+bashio::log.info "File Sync service stopped (code: $1, signal: $2)"
+exit 0
