@@ -1,15 +1,26 @@
-ARG BUILD_FROM=ghcr.io/home-assistant/amd64-base:12
-FROM $BUILD_FROM
+FROM alpine:3.20
 
-# Копируем аддон
-COPY run.sh /run.sh
-COPY etc/ /etc/
-COPY config.yaml /config.yaml
-COPY README.md /README.md
+# Версии
+ARG S6_OVERLAY_VERSION=v3.1.6.2
 
-RUN chmod a+x /run.sh \
-    && chmod a+x /etc/services.d/ssl_sync/run \
-    && chmod a+x /etc/services.d/ssl_sync/finish \
-    && chmod a+x /etc/cont-init.d/10-init || true
+# Установка зависимостей
+RUN apk add --no-cache bash curl rsync inotify-tools openssl
 
-# Не переопределяем ENTRYPOINT или CMD — базовый образ запускает s6-overlay как PID 1
+# Установка s6-overlay
+ADD https://github.com/just-containers/s6-overlay/releases/download/${S6_OVERLAY_VERSION}/s6-overlay-noarch.tar.xz /tmp/
+ADD https://github.com/just-containers/s6-overlay/releases/download/${S6_OVERLAY_VERSION}/s6-overlay-x86_64.tar.xz /tmp/
+
+RUN tar -C / -Jxpf /tmp/s6-overlay-noarch.tar.xz && \
+    tar -C / -Jxpf /tmp/s6-overlay-x86_64.tar.xz && \
+    rm -f /tmp/*.tar.xz
+
+# Копируем rootfs полностью в контейнер
+COPY rootfs/ /
+
+# Скрипт запуска
+COPY run.sh /root/
+
+RUN chmod +x /root/run.sh
+
+ENTRYPOINT ["/init"]
+
