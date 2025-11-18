@@ -1,9 +1,4 @@
 #!/usr/bin/with-contenv bash
-bashio::log.info "Init: Setting up dirs"
-
-# Mkdir с config (однократно)
+bashio::log.info "Init: Setup dirs"
 DEST_REL=$(bashio::config 'dest_relative_path')
 mkdir -p "/ssl/${DEST_REL}" || true
-
-# Другие init (e.g., perms)
-chmod 644 /ssl/*/*.pem 2>/dev/null || true
