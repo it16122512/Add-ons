@@ -1,0 +1,8 @@
+#!/bin/bash
+set -e
+
+echo "[ssl_sync] service starting..."
+
+# Запуск основного скрипта
+exec /root/run.sh
+
