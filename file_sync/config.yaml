@@ -1,30 +1,20 @@
-name: File Sync SSL
-slug: file_sync
-version: "1.5.0"
-description: "Sync SSL certificates from Nginx Proxy Manager to Asterisk"
-url: "https://github.com/it16122512/Add-ons/tree/main/file_sync"
-arch:
-  - aarch64
-  - amd64
-  - armv7
-build_from:
-  aarch64: "ghcr.io/home-assistant/aarch64-base:3.2.7"
-  amd64: "ghcr.io/home-assistant/amd64-base:3.2.7"
-  armv7: "ghcr.io/home-assistant/armv7-base:3.2.7"
-startup: services
-boot: auto
-init: true
-hassio_api: true
-host_network: false
-map:
-  - addon_configs:ro
-  - ssl:rw
-options:
-  source_relative_path: "a0d7b954_nginxproxymanager/letsencrypt/live/npm-8"
-  dest_relative_path: "nginxproxymanager/live/npm-1"
-  interval_seconds: 300
-schema:
-  source_relative_path: "str"
-  dest_relative_path: "str"
-  interval_seconds: "int(60,3600)"
-  
+# Auto FROM из config.yaml (no ARG — фиксит warning)
+FROM $BUILD_FROM
+
+# Пакеты (минимально, как в LaneaLucy ssh)
+RUN apk add --no-cache curl coreutils
+
+# Bashio уже в base:3.2.7
+
+# Файлы
+COPY rootfs/ /
+COPY run.sh /run.sh
+
+# Права
+RUN chmod a+x /run.sh \
+    /etc/cont-init.d/10-init \
+    /etc/services.d/file_sync/run \
+    /etc/services.d/file_sync/finish
+
+# Для services: s6-init PID 1 (как в LaneaLucy)
+ENTRYPOINT ["/init"]
