@@ -1,9 +1,0 @@
-name: Lab HAOS Add-ons
-url: https://github.com/it16122512/file_sync
-maintainer: Pavel An
-version: 1
-addons:
-  - slug: file_sync
-    name: File Sync SSL
-    description: Sync SSL certificates
-    version: 1.1.0
