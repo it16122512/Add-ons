@@ -1,17 +1,17 @@
-#!/usr/bin/with-contenv bash
+#!/usr/bin/env bash
 set -e
 
+# Bashio (из base)
 bashio::log.level "INFO"
-bashio::log.info "SSL Sync v1.4.1 starting..."
+bashio::log.info "SSL Sync v1.5.0 starting..."
 
-# Обработка сигналов от s6
+# Trap TERM от s6 (graceful)
 trap 'bashio::log.info "Graceful stop"; exit 0' TERM INT
 
-# Конфигурация
+# Config
 SRC_REL=$(bashio::config 'source_relative_path')
 DEST_REL=$(bashio::config 'dest_relative_path')
 INTERVAL=$(bashio::config 'interval_seconds')
-
 SRC_ROOT="/addon_configs"
 DEST_ROOT="/ssl"
 SRC_DIR="${SRC_ROOT}/${SRC_REL}"
@@ -19,20 +19,17 @@ DEST_DIR="${DEST_ROOT}/${DEST_REL}"
 
 bashio::log.info "Config: ${SRC_DIR} -> ${DEST_DIR} (interval: ${INTERVAL}s)"
 
-# Основной цикл
+# Daemon loop (long-running для s6)
 while true; do
   bashio::log.info "=== Sync cycle ==="
-
   if [ ! -d "${SRC_DIR}" ]; then
     bashio::log.warning "Source missing: ${SRC_DIR}"
     ls -la /addon_configs/ 2>/dev/null || bashio::log.warning "Mount failed"
     sleep 60
     continue
   fi
-
   mkdir -p "${DEST_DIR}"
   CHANGED=false
-
   for f in privkey.pem fullchain.pem; do
     SRC_FILE="${SRC_DIR}/${f}"
     DEST_FILE="${DEST_DIR}/${f}"
@@ -46,8 +43,6 @@ while true; do
       bashio::log.warning "${f} missing"
     fi
   done
-
-  # Перезапуск Asterisk при изменениях
   if [ "${CHANGED}" = true ]; then
     TOKEN=$(bashio::supervisor_token)
     ADDON_ID="b35499aa_asterisk"
@@ -58,7 +53,6 @@ while true; do
       bashio::log.warning "Restart failed"
     fi
   fi
-
   bashio::log.info "Cycle done; sleep ${INTERVAL}s"
   sleep "${INTERVAL}"
 done
