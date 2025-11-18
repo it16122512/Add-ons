@@ -1,4 +1,4 @@
-#!/usr/bin/with-contenv bash
-# Этот скрипт запускает s6-overlay, он ДОЛЖЕН быть максимально простым
+#!/command/with-contenv bash
+# Обратите внимание: /command/, а не /usr/bin/
 
 exec /run.sh
