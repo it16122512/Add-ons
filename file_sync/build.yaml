@@ -1,1 +1,8 @@
+arch:
+  - amd64
+  - aarch64
+  - armv7
+  - i386
+image: ghcr.io/${OWNER}/${REPO}:${TAG}
+format: amd64
 
