@@ -9,8 +9,8 @@ arch:
   - amd64
   - armv7
 
-# startup: application + init: false — полностью убирает s6-overlay и все suexec ошибки
-startup: application
+# Используем s6-overlay
+startup: services
 init: true
 boot: auto
 
@@ -26,9 +26,7 @@ options:
   dest_relative_path: "nginxproxymanager/live/npm-1"
   interval_seconds: 300
 
-# ВНИМАНИЕ: int, float, bool — ОБЯЗАТЕЛЬНО в кавычках!
 schema:
   source_relative_path: "str"
   dest_relative_path: "str"
-  interval_seconds: "int(60,3600)"   # опционально: ограничение 1–60 минут
-  
+  interval_seconds: "int(60,3600)"   # ограничение 1–60 минут
