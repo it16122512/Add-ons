@@ -1,44 +1,35 @@
 name: File Sync SSL
 slug: file_sync
-version: "1.1.0"
+version: "1.2.0"
 description: "Sync SSL certificates from Nginx Proxy Manager to Asterisk"
 url: "https://github.com/it16122512/Add-ons/tree/main/file_sync"
-
-# Какие архитектуры собирать
+# Архитектуры (auto-detect в build)
 arch:
   - aarch64
   - amd64
   - armv7
-
-# Правильная сборка через base image Home Assistant
+# Base для 2025.11 (Alpine 3.20+, s6 v3.2+)
 build_from:
-  amd64: "ghcr.io/home-assistant/amd64-base:12"
-  aarch64: "ghcr.io/home-assistant/aarch64-base:12"
-  armv7: "ghcr.io/home-assistant/armv7-base:12"
-
-# Когда запускать
-startup: services
+  amd64: "ghcr.io/home-assistant/amd64-base:3.22"
+  aarch64: "ghcr.io/home-assistant/aarch64-base:3.22"
+  armv7: "ghcr.io/home-assistant/armv7-base:3.22"
+# Запуск
+startup: services  # Для s6 + services.d
 boot: auto
-
-# Доступ к Supervisor API
+# API
 hassio_api: true
-hassio_role: admin
-
-# Сетевые настройки
+# Сеть
 host_network: false
-
-# Подключаемые директории
+# Volumes
 map:
   - addon_configs:ro
   - ssl:rw
-
-# Опции по умолчанию
+# Defaults
 options:
   source_relative_path: "a0d7b954_nginxproxymanager/letsencrypt/live/npm-8"
   dest_relative_path: "nginxproxymanager/live/npm-1"
   interval_seconds: 300
-
-# Типы параметров
+# Schema
 schema:
   source_relative_path: str
   dest_relative_path: str
