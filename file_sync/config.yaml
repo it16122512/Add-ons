@@ -1,6 +1,6 @@
 name: File Sync SSL
 slug: file_sync
-version: "1.7.1"
+version: "1.6.0"
 description: "Sync SSL certificates from Nginx Proxy Manager to Asterisk"
 url: https://github.com/it16122512/Add-ons/file_sync
 arch:
@@ -23,14 +23,9 @@ options:
   source_relative_path: "a0d7b954_nginxproxymanager/letsencrypt/live/npm-8"
   dest_relative_path: "nginxproxymanager/live/npm-1"
   interval_seconds: 300
-  advanced_mode: false
-  log_level: info
-  timezone: Etc/UTC+3
+  log_level: info  # Новый: debug/info/warning/error
 schema:
   source_relative_path: "str"
   dest_relative_path: "str"
   interval_seconds: "int(60,3600)"
-  advanced_mode: "bool"
-  log_level: "select(info, debug, warning, error) advanced"
-  timezone: "str? advanced"
-  
+  log_level: "select(info, debug, warning, error)"  # UI-меню в Configure
