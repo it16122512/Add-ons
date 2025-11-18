@@ -1,8 +1,4 @@
-#!/bin/bash
-set -e
-
-echo "[ssl_sync] service starting..."
-
-# Запуск основного скрипта
-exec /root/run.sh
-
+#!/usr/bin/with-contenv bash
+# S6: exec daemon (простой, без set -e — s6 handles)
+exec 2>&1  # Stdout to logs
+exec /usr/local/bin/run.sh
