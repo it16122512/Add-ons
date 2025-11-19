@@ -1,112 +1,166 @@
-#!/usr/bin/env bash
-set -e
+#!/usr/bin/with-contenv bash
+set -u
 
-# Bashio из base
-LOG_LEVEL=$(bashio::config 'log_level')
-bashio::log.level "$LOG_LEVEL"
-bashio::log.info "SSL Sync v1.6.3 starting (log level: $LOG_LEVEL)..."
+# --- helper: provide minimal fallback for bashio if absent ---
+_have_bashio() {
+  command -v bashio >/dev/null 2>&1
+}
 
-# Timezone (для локальных timestamps в log/date) - С УЛУЧШЕННОЙ ПРОВЕРКОЙ
-TZ=$(bashio::config 'timezone' 'UTC')  # ← ДОБАВИТЬ значение по умолчанию
-if [ -z "$TZ" ]; then
-    TZ="UTC"
+# Simple wrappers: если bashio есть — используем; иначе — fallback printf/echo
+_log_info() {
+  if _have_bashio; then
+    bashio::log.info "$1"
+  else
+    echo "[INFO] $1"
+  fi
+}
+_log_debug() {
+  if _have_bashio; then
+    bashio::log.debug "$1"
+  else
+    echo "[DEBUG] $1"
+  fi
+}
+_log_warn() {
+  if _have_bashio; then
+    bashio::log.warning "$1"
+  else
+    echo "[WARN] $1"
+  fi
+}
+_log_err() {
+  if _have_bashio; then
+    bashio::log.error "$1"
+  else
+    echo "[ERROR] $1" >&2
+  fi
+}
+
+# Config read (use bashio if present, else /data/options.json)
+if _have_bashio; then
+  LOG_LEVEL=$(bashio::config 'log_level' || echo "info")
+else
+  LOG_LEVEL="info"
 fi
-export TZ
-bashio::log.info "Timezone set to $TZ (local time: $(date))"
 
-# Trap TERM от s6 (graceful) - УЛУЧШИТЬ обработку
+_log_info "SSL Sync v1.6.3 starting (log level: ${LOG_LEVEL})..."
+
+# Timezone
+if _have_bashio; then
+  TZ=$(bashio::config 'timezone' 'UTC')
+else
+  TZ=$(jq -r '.timezone // "UTC"' /data/options.json 2>/dev/null || echo "UTC")
+fi
+[ -z "$TZ" ] && TZ="UTC"
+export TZ
+_log_info "Timezone set to $TZ (local time: $(date))"
+
+# graceful shutdown
 cleanup() {
-    bashio::log.info "Graceful stop received"
+    _log_info "Graceful stop received"
     exit 0
 }
 trap cleanup TERM INT
 
-# Config
-SRC_REL=$(bashio::config 'source_relative_path')
-DEST_REL=$(bashio::config 'dest_relative_path')
-INTERVAL=$(bashio::config 'interval_seconds')
+# Read main config fields (with defaults)
+if _have_bashio; then
+  SRC_REL=$(bashio::config 'source_relative_path')
+  DEST_REL=$(bashio::config 'dest_relative_path')
+  INTERVAL=$(bashio::config 'interval_seconds')
+else
+  SRC_REL=$(jq -r '.source_relative_path // empty' /data/options.json 2>/dev/null || echo "")
+  DEST_REL=$(jq -r '.dest_relative_path // empty' /data/options.json 2>/dev/null || echo "")
+  INTERVAL=$(jq -r '.interval_seconds // 300' /data/options.json 2>/dev/null || echo "300")
+fi
+
+# Defaults and roots
 SRC_ROOT="/addon_configs"
 DEST_ROOT="/ssl"
 SRC_DIR="${SRC_ROOT}/${SRC_REL}"
 DEST_DIR="${DEST_ROOT}/${DEST_REL}"
 
-# ← ДОБАВИТЬ проверку критических параметров
+# Validate critical parameters
 if [ -z "$SRC_REL" ] || [ -z "$DEST_REL" ]; then
-    bashio::log.error "Source or destination path not configured!"
+    _log_err "Source or destination path not configured! (source_relative_path / dest_relative_path)"
     exit 1
 fi
 
-bashio::log.info "Config: ${SRC_DIR} -> ${DEST_DIR} (interval: ${INTERVAL}s)"
+# Ensure INTERVAL is numeric and within reasonable bounds
+if ! [[ "${INTERVAL}" =~ ^[0-9]+$ ]]; then
+  _log_warn "interval_seconds is not numeric, using 300"
+  INTERVAL=300
+fi
 
-# Daemon loop (long-running для s6)
+_log_info "Config: ${SRC_DIR} -> ${DEST_DIR} (interval: ${INTERVAL}s)"
+
+# Main loop
 while true; do
-  bashio::log.info "=== Sync cycle (local: $(date)) ==="
-  
-  # ← УЛУЧШИТЬ проверку source directory
+  _log_info "=== Sync cycle (local: $(date)) ==="
+
   if [ ! -d "${SRC_DIR}" ]; then
-    bashio::log.error "Source directory missing: ${SRC_DIR}"
-    bashio::log.debug "Available in /addon_configs:"
-    find /addon_configs -maxdepth 2 -type d 2>/dev/null || bashio::log.warning "Cannot access /addon_configs"
+    _log_err "Source directory missing: ${SRC_DIR}"
+    _log_debug "Available in /addon_configs:"
+    ls -la /addon_configs 2>/dev/null || _log_warn "Cannot access /addon_configs"
     sleep 60
     continue
   fi
-  
-  # ← УЛУЧШИТЬ создание destination directory
+
   if ! mkdir -p "${DEST_DIR}"; then
-    bashio::log.error "Cannot create destination directory: ${DEST_DIR}"
+    _log_err "Cannot create destination directory: ${DEST_DIR}"
     sleep 60
     continue
   fi
-  
+
   CHANGED=false
   for f in privkey.pem fullchain.pem; do
     SRC_FILE="${SRC_DIR}/${f}"
     DEST_FILE="${DEST_DIR}/${f}"
-    
-    # ← ДОБАВИТЬ более детальную проверку файлов
+
     if [ -f "${SRC_FILE}" ]; then
       SRC_SIZE=$(stat -c%s "${SRC_FILE}" 2>/dev/null || echo "0")
-      if [ "$SRC_SIZE" -eq 0 ]; then
-        bashio::log.warning "Source file is empty: ${f}"
+      if [ "${SRC_SIZE}" -eq 0 ]; then
+        _log_warn "Source file is empty: ${f}"
         continue
       fi
-      
+
       if ! cmp -s "${SRC_FILE}" "${DEST_FILE}" 2>/dev/null; then
-        # ← ДОБАВИТЬ проверку успешности копирования
         if cp -f "${SRC_FILE}" "${DEST_FILE}"; then
-          bashio::log.info "Updated ${f} (size: ${SRC_SIZE} bytes)"
+          _log_info "Updated ${f} (size: ${SRC_SIZE} bytes)"
           CHANGED=true
         else
-          bashio::log.error "Failed to copy ${f}"
+          _log_err "Failed to copy ${f}"
         fi
       else
-        bashio::log.debug "No changes for ${f}"
+        _log_debug "No changes for ${f}"
       fi
     else
-      bashio::log.warning "Source file missing: ${f}"
-      # ← ДОБАВИТЬ список доступных файлов для отладки
-      bashio::log.debug "Available files in source: $(ls -la "${SRC_DIR}" 2>/dev/null || echo 'none')"
+      _log_warn "Source file missing: ${f}"
+      _log_debug "Available files in source: $(ls -la \"${SRC_DIR}\" 2>/dev/null || echo 'none')"
     fi
   done
-  
+
   if [ "${CHANGED}" = true ]; then
-    TOKEN=$(bashio::supervisor_token)
+    if _have_bashio; then
+      TOKEN=$(bashio::supervisor_token)
+    else
+      TOKEN=""
+    fi
     ADDON_ID="b35499aa_asterisk"
-    
-    # ← УЛУЧШИТЬ проверку токена и перезапуск
+
     if [ -n "${TOKEN}" ]; then
-      bashio::log.info "Attempting to restart ${ADDON_ID}..."
+      _log_info "Attempting to restart ${ADDON_ID}..."
       if curl -s -f -H "Authorization: Bearer ${TOKEN}" \
         -X POST "http://supervisor/addons/${ADDON_ID}/restart" >/dev/null 2>&1; then
-        bashio::log.info "Successfully restarted ${ADDON_ID}"
+        _log_info "Successfully restarted ${ADDON_ID}"
       else
-        bashio::log.error "Failed to restart ${ADDON_ID} - check if addon exists and is running"
+        _log_err "Failed to restart ${ADDON_ID} - check if addon exists and is running"
       fi
     else
-      bashio::log.error "Cannot get supervisor token - restart skipped"
+      _log_err "Cannot get supervisor token - restart skipped"
     fi
   fi
-  
-  bashio::log.info "Cycle completed. Sleeping for ${INTERVAL}s..."
+
+  _log_info "Cycle completed. Sleeping for ${INTERVAL}s..."
   sleep "${INTERVAL}"
 done
+
