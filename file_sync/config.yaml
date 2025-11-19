@@ -28,4 +28,6 @@ schema:
   source_relative_path: "str"
   dest_relative_path: "str"
   interval_seconds: "int(60,3600)"
-  log_level: "list(info, debug, warning, error)"  # ← Теперь валидно, UI: dropdown
+  schema:
+  log_level: "list(info|debug|warning|error)"
+
