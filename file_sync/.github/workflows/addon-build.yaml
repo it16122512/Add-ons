@@ -2,10 +2,10 @@ name: Build Add-on
 on:
   push:
     branches: [main]
-    paths: ['file_sync/**']  # ← ДОБАВИТЬ триггер только при изменении file_sync
+    paths: ['file_sync/**']
   pull_request:
     branches: [main]
-    paths: ['file_sync/**']  # ← ДОБАВИТЬ
+    paths: ['file_sync/**']
   release:
     types: [published]
 
@@ -14,15 +14,15 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        arch: [amd64, aarch64, armv7]  # ← ИЗМЕНИТЬ на матрицу
+        arch: [amd64, aarch64, armv7]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         
-      - name: Set up QEMU  # ← ДОБАВИТЬ для мульти-архитектуры
+      - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
         
-      - name: Set up Docker Buildx  # ← ДОБАВИТЬ
+      - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         
       - name: Login to GHCR
@@ -33,7 +33,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
           
-      - name: Extract metadata  # ← ДОБАВИТЬ для автоматических тегов
+      - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
@@ -49,9 +49,13 @@ jobs:
         with:
           context: ./file_sync
           file: ./file_sync/Dockerfile
-          platforms: linux/${{ matrix.arch }}  # ← ИЗМЕНИТЬ на матричную переменную
+          platforms: linux/${{ matrix.arch }}
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}  # ← ИСПОЛЬЗОВАТЬ метаданные
+          tags: |
+            ghcr.io/it16122512/addons/file_sync:1.6.1  # ← ОБНОВИТЬ версию
+            ghcr.io/it16122512/addons/file_sync:latest
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha  # ← ДОБАВИТЬ кэширование
+          cache-from: type=gha
           cache-to: type=gha,mode=max
+          build-args: |  # ← ДОБАВИТЬ build-args
+            BUILD_FROM=ghcr.io/home-assistant/${{ matrix.arch }}-base:3.2.7
