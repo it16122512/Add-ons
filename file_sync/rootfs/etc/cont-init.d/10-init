@@ -1,5 +1,11 @@
-#!/usr/bin/with-contenv bash
-bashio::log.info "Init: Setup dirs"
+#!/usr/bin/with-contenv sh
 
-DEST_REL=$(bashio::config 'dest_relative_path')
+# Получаем конфиг из файла, так как bashio не доступен
+if [ -f /data/options.json ]; then
+    DEST_REL=$(grep -o '"dest_relative_path":"[^"]*' /data/options.json | cut -d'"' -f4)
+else
+    DEST_REL="nginxproxymanager/live/npm-1"  # fallback
+fi
+
+echo "Init: Creating directory /ssl/${DEST_REL}"
 mkdir -p "/ssl/${DEST_REL}" || true
