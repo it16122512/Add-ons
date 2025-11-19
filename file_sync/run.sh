@@ -4,7 +4,7 @@ set -e
 # Bashio из base
 LOG_LEVEL=$(bashio::config 'log_level')
 bashio::log.level "$LOG_LEVEL"
-bashio::log.info "SSL Sync v1.7.0 starting (log level: $LOG_LEVEL)..."
+bashio::log.info "SSL Sync v1.6.0 starting (log level: $LOG_LEVEL)..."
 
 # Timezone (для локальных timestamps в log/date)
 TZ=$(bashio::config 'timezone')
