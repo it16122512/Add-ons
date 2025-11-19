@@ -17,16 +17,18 @@ init: true
 hassio_api: true
 host_network: false
 map:
-  - addons:ro
+  - addon_configs:ro
   - ssl:rw
 options:
   source_relative_path: "a0d7b954_nginxproxymanager/letsencrypt/live/npm-8"
   dest_relative_path: "nginxproxymanager/live/npm-1"
   interval_seconds: 300
   log_level: info
-  timezone: "Europe/Moscow"  # ← ДОБАВИТЬ параметр времени
+  timezone: "Europe/Moscow"  # ← ДОБАВИТЬ
 schema:
   source_relative_path: str
   dest_relative_path: str
   interval_seconds: int(60,3600)
-  log_level: "select(info, debug, warning, error)"
+  log_level: list(info|debug|warning|error)  # ← ИСПРАВИТЬ здесь!
+  timezone: str  # ← ДОБАВИТЬ
+  
