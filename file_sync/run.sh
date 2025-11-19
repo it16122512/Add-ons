@@ -8,7 +8,7 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$level] $*"
 }
 
-log info "SSL Sync v1.6.8 starting..."
+log info "SSL Sync starting..."
 
 # Получаем конфигурацию через bashio
 SRC_REL=$(bashio::config 'source_relative_path')
