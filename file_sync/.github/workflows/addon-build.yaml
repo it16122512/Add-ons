@@ -52,7 +52,7 @@ jobs:
           platforms: linux/${{ matrix.arch }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: |
-            ghcr.io/it16122512/addons/file_sync:1.6.5  # ← ОБНОВИТЬ версию
+            ghcr.io/it16122512/addons/file_sync:1.6.6  # ← ОБНОВИТЬ версию
             ghcr.io/it16122512/addons/file_sync:latest
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
