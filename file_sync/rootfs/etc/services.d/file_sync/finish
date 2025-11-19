@@ -1,9 +1,4 @@
 #!/usr/bin/with-contenv bash
 # finish called by s6 on service stop
-# Попробуем использовать bashio, но обеспечить fallback
-if command -v bashio >/dev/null 2>&1; then
-    bashio::log.info "File Sync service stopped (code: $1, signal: $2)"
-else
-    echo "File Sync service stopped (code: $1, signal: $2)"
-fi
+echo "File Sync service stopped (code: $1, signal: $2)"
 exit 0
