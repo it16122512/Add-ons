@@ -25,8 +25,7 @@ options:
   interval_seconds: 300
   log_level: info
 schema:
-  source_relative_path: "str"
-  dest_relative_path: "str"
-  interval_seconds: "int(60,3600)"
-  log_level: "match(info|debug|warning|error)"
-
+  source_relative_path: str
+  dest_relative_path: str
+  interval_seconds: int(60,3600)
+  log_level: list(info|debug|warning|error)
