@@ -43,7 +43,7 @@ else
   LOG_LEVEL="info"
 fi
 
-_log_info "SSL Sync v1.6.3 starting (log level: ${LOG_LEVEL})..."
+_log_info "SSL Sync v1.6.4 starting (log level: ${LOG_LEVEL})..."
 
 # Timezone
 if _have_bashio; then
