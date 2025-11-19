@@ -19,6 +19,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         
+      - name: Extract version
+        id: version
+        run: |
+          VERSION=$(grep 'version:' ./file_sync/config.yaml | cut -d'"' -f2)
+          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Version: ${VERSION}"
+        
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
         
@@ -33,17 +40,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
           
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/it16122512/addons/file_sync
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=sha,prefix={{branch}}-
-            
       - name: Build & Push
         uses: docker/build-push-action@v5
         with:
@@ -52,10 +48,10 @@ jobs:
           platforms: linux/${{ matrix.arch }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: |
-            ghcr.io/it16122512/addons/file_sync:1.6.7  # ← ОБНОВИТЬ версию
+            ghcr.io/it16122512/addons/file_sync:${{ steps.version.outputs.VERSION }}
             ghcr.io/it16122512/addons/file_sync:latest
-          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          build-args: |  # ← ДОБАВИТЬ build-args
+          build-args: |
             BUILD_FROM=ghcr.io/home-assistant/${{ matrix.arch }}-base:3.2.7
+            
