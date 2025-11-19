@@ -3,7 +3,7 @@ ARG BUILD_FROM
 FROM $BUILD_FROM
 
 # Пакеты
-RUN apk add --no-cache curl coreutils
+RUN apk add --no-cache curl coreutils tzdata  # ← ДОБАВИТЬ tzdata
 
 # Копируем файлы
 COPY rootfs/ /
