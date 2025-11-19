@@ -8,7 +8,7 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$level] $*"
 }
 
-log info "SSL Sync v1.6.6 starting..."
+log info "SSL Sync v1.6.7 starting..."
 
 # Timezone
 TZ="UTC"
@@ -23,9 +23,10 @@ cleanup() {
 trap cleanup TERM INT
 
 # Конфигурация
-SRC_REL="source"          # можно заменить на нужный путь
-DEST_REL="dest"           # можно заменить на нужный путь
-INTERVAL=60               # интервал в секундах
+SRC_REL="${SOURCE_RELATIVE_PATH}"       # из конфигурации Add-on
+DEST_REL="${DEST_RELATIVE_PATH}"        # из конфигурации Add-on
+INTERVAL="${INTERVAL_SECONDS:-60}"      # дефолт 60 секунд
+
 SRC_ROOT="/addon_configs"
 DEST_ROOT="/ssl"
 SRC_DIR="${SRC_ROOT}/${SRC_REL}"
