@@ -28,6 +28,5 @@ schema:
   source_relative_path: "str"
   dest_relative_path: "str"
   interval_seconds: "int(60,3600)"
-  schema:
-  log_level: "list(info|debug|warning|error)"
+  log_level: "match(info|debug|warning|error)"
 
