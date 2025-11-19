@@ -1,4 +1,4 @@
-#!/usr/bin/with-contenv bash
+#!/usr/bin/with-contenv bashio
 set -e
 
 # Логирование
@@ -8,10 +8,15 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$level] $*"
 }
 
-log info "SSL Sync v1.6.7 starting..."
+log info "SSL Sync v1.6.8 starting..."
+
+# Получаем конфигурацию через bashio
+SRC_REL=$(bashio::config 'source_relative_path')
+DEST_REL=$(bashio::config 'dest_relative_path')
+INTERVAL=$(bashio::config 'interval_seconds')
+TZ=$(bashio::config 'timezone' 'UTC')
 
 # Timezone
-TZ="UTC"
 export TZ
 log info "Timezone set to $TZ (local time: $(date))"
 
@@ -22,15 +27,17 @@ cleanup() {
 }
 trap cleanup TERM INT
 
-# Конфигурация
-SRC_REL="${SOURCE_RELATIVE_PATH}"       # из конфигурации Add-on
-DEST_REL="${DEST_RELATIVE_PATH}"        # из конфигурации Add-on
-INTERVAL="${INTERVAL_SECONDS:-60}"      # дефолт 60 секунд
-
+# Конфигурация путей
 SRC_ROOT="/addon_configs"
 DEST_ROOT="/ssl"
 SRC_DIR="${SRC_ROOT}/${SRC_REL}"
 DEST_DIR="${DEST_ROOT}/${DEST_REL}"
+
+# Проверка обязательных параметров
+if [ -z "$SRC_REL" ] || [ -z "$DEST_REL" ]; then
+    log error "Source or destination path not configured!"
+    exit 1
+fi
 
 log info "Config: ${SRC_DIR} -> ${DEST_DIR} (interval: ${INTERVAL}s)"
 
@@ -39,6 +46,7 @@ mkdir -p "${DEST_DIR}" || {
     echo "ERROR: Cannot create destination directory ${DEST_DIR}"
     exit 1
 }
+
 # Главный цикл
 while true; do
     log info "=== Sync cycle (local: $(date)) ==="
