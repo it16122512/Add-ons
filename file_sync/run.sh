@@ -8,7 +8,7 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$level] $*"
 }
 
-log info "SSL Sync v1.6.5 starting..."
+log info "SSL Sync v1.6.6 starting..."
 
 # Timezone
 TZ="UTC"
