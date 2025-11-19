@@ -1,14 +1,14 @@
 ARG BUILD_FROM
 FROM $BUILD_FROM
 
-# Устанавливаем пакеты
+# Устанавливаем необходимые пакеты
 RUN apk add --no-cache bash curl jq coreutils tzdata
 
 # Копируем файлы
 COPY rootfs/ /
 COPY run.sh /run.sh
 
-# Права на исполнение
+# Делаем скрипты исполняемыми
 RUN chmod a+x /run.sh \
     /etc/cont-init.d/10-init \
     /etc/services.d/file_sync/run \
