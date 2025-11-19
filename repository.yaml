@@ -4,5 +4,5 @@ maintainer: it16122512
 addons:
   - name: File Sync SSL
     slug: file_sync
-    version: "1.6.7"  # ← ИЗМЕНИТЬ версию!
+    version: "1.6.8"  # ← ИЗМЕНИТЬ версию!
 
