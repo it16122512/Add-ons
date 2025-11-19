@@ -2,7 +2,7 @@ ARG BUILD_FROM
 FROM $BUILD_FROM
 
 # Устанавливаем необходимые пакеты
-RUN apk add --no-cache bash curl jq coreutils tzdata
+RUN apk add --no-cache bash coreutils tzdata
 
 # Копируем файлы
 COPY rootfs/ /
