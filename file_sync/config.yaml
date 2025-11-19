@@ -1,6 +1,6 @@
 name: File Sync SSL
 slug: file_sync
-version: "1.6.6"
+version: "1.6.7"
 description: "Sync SSL certificates from Nginx Proxy Manager to Asterisk"
 url: https://github.com/it16122512/Add-ons/file_sync
 arch:
