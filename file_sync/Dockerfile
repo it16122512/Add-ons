@@ -14,5 +14,5 @@ RUN chmod a+x /run.sh \
     /etc/services.d/file_sync/run \
     /etc/services.d/file_sync/finish
 
-# s6-overlay как PID 1 (startup: services)
+# s6-overlay как PID 1
 ENTRYPOINT ["/init"]
