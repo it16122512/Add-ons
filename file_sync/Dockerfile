@@ -1,8 +1,11 @@
 ARG BUILD_FROM
-FROM $BUILD_FROM
+FROM ${BUILD_FROM}
 
 # Пакеты
-RUN apk add --no-cache bash curl jq coreutils tzdata
+RUN apk add --no-cache bash curl jq coreutils tzdata python3 py3-pip
+
+# Устанавливаем bashio через pip (альтернативный способ)
+RUN pip3 install --no-cache-dir bashio
 
 # Копируем файлы
 COPY rootfs/ /
