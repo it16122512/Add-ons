@@ -12,7 +12,7 @@ COPY run.sh /run.sh
 RUN chmod a+x /run.sh \
     /etc/cont-init.d/10-init \
     /etc/services.d/file_sync/run \
-    /etc/services.d/file_sync/finish
+        /etc/services.d/file_sync/finish
 
 # s6-overlay как PID 1
 ENTRYPOINT ["/init"]
