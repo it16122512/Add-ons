@@ -98,3 +98,4 @@ while true; do
     bashio::log.info "Cycle completed. Sleeping for ${INTERVAL}s..."
     sleep "${INTERVAL}"
 done
+
