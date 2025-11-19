@@ -1,21 +1,24 @@
-ARG BUILD_FROM
-FROM ${BUILD_FROM}
+# Обязательный ARG с дефолтом для Docker 2025+ (warning уйдёт)
+ARG BUILD_FROM=ghcr.io/home-assistant/amd64-base:3.2.7
 
-# Пакеты
-RUN apk add --no-cache bash curl jq coreutils tzdata
+FROM $BUILD_FROM
 
-# Создаем симлинк для bashio (часто уже установлен в базовом образе)
-RUN ln -sf /usr/lib/bashio/bashio /usr/bin/bashio || true
+# Пакеты (bash уже в base, но jq/coreutils/tzdata нужны)
+RUN apk add --no-cache \
+    curl \
+    jq \
+    coreutils \
+    tzdata
 
 # Копируем файлы
 COPY rootfs/ /
 COPY run.sh /run.sh
 
 # Права на исполнение
-RUN chmod a+x /run.sh \
+RUN chmod +x /run.sh \
     /etc/cont-init.d/10-init \
     /etc/services.d/file_sync/run \
     /etc/services.d/file_sync/finish
 
-# s6-overlay как PID 1
+# s6-overlay v3 как PID 1 (стандарт для HAOS 2025.11+)
 ENTRYPOINT ["/init"]
