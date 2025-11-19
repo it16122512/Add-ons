@@ -33,6 +33,11 @@ DEST_DIR="${DEST_ROOT}/${DEST_REL}"
 
 log info "Config: ${SRC_DIR} -> ${DEST_DIR} (interval: ${INTERVAL}s)"
 
+echo "Creating destination: ${DEST_DIR}"
+mkdir -p "${DEST_DIR}" || {
+    echo "ERROR: Cannot create destination directory ${DEST_DIR}"
+    exit 1
+}
 # Главный цикл
 while true; do
     log info "=== Sync cycle (local: $(date)) ==="
