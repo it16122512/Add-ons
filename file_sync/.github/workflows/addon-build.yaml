@@ -2,32 +2,56 @@ name: Build Add-on
 on:
   push:
     branches: [main]
+    paths: ['file_sync/**']  # ← ДОБАВИТЬ триггер только при изменении file_sync
   pull_request:
     branches: [main]
+    paths: ['file_sync/**']  # ← ДОБАВИТЬ
   release:
     types: [published]
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [amd64, aarch64, armv7]  # ← ИЗМЕНИТЬ на матрицу
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        
+      - name: Set up QEMU  # ← ДОБАВИТЬ для мульти-архитектуры
+        uses: docker/setup-qemu-action@v3
+        
+      - name: Set up Docker Buildx  # ← ДОБАВИТЬ
+        uses: docker/setup-buildx-action@v3
+        
       - name: Login to GHCR
+        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Extract metadata  # ← ДОБАВИТЬ для автоматических тегов
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/it16122512/addons/file_sync
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=sha,prefix={{branch}}-
+            
       - name: Build & Push
         uses: docker/build-push-action@v5
         with:
           context: ./file_sync
           file: ./file_sync/Dockerfile
-          platforms: linux/amd64,linux/arm64,linux/arm/v7
+          platforms: linux/${{ matrix.arch }}  # ← ИЗМЕНИТЬ на матричную переменную
           push: ${{ github.event_name != 'pull_request' }}
-          tags: |
-            ghcr.io/it16122512/addons/file_sync:1.6.0
-            ghcr.io/it16122512/addons/file_sync:latest
-          build-args: |
-            BUILD_VERSION=1.6.0
-            BUILD_ARCH=amd64,aarch64,armv7
+          tags: ${{ steps.meta.outputs.tags }}  # ← ИСПОЛЬЗОВАТЬ метаданные
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha  # ← ДОБАВИТЬ кэширование
+          cache-to: type=gha,mode=max
