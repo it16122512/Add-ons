@@ -33,14 +33,14 @@ log info "=== CONFIGURATION ==="
 # Получаем конфигурацию
 SRC_REL=$(bashio::config 'source_relative_path')
 DEST_REL=$(bashio::config 'dest_relative_path')
-INTERVAL=$(bashio::config 'interval_seconds')
+ASTERISK_SLUG=$(bashio::config 'asterisk_addon_slug')  # ← ДОБАВИЛ получение slug Asterisk
 TZ=$(bashio::config 'timezone' 'UTC')
 
 export TZ
 log info "Configuration:"
 log info "  source_relative_path: $SRC_REL"
 log info "  dest_relative_path: $DEST_REL"
-log info "  interval_seconds: $INTERVAL"
+log info "  asterisk_addon_slug: $ASTERISK_SLUG"  # ← ДОБАВИЛ в логирование
 log info "  timezone: $TZ"
 
 # ==================== ПОИСК NPM СЕРТИФИКАТОВ ====================
@@ -153,9 +153,9 @@ if [ "$CHANGED" = true ]; then
     # Перезапуск Asterisk через Supervisor API
     TOKEN=$(bashio::supervisor.token 2>/dev/null || echo "")
     if [ -n "$TOKEN" ]; then
-        log info "Sending restart command to Asterisk..."
+        log info "Sending restart command to Asterisk addon: $ASTERISK_SLUG"  # ← ИСПОЛЬЗУЕМ ПЕРЕМЕННУЮ
         if curl -s -f -H "Authorization: Bearer $TOKEN" \
-           -X POST "http://supervisor/addons/b35499aa_asterisk/restart" >/dev/null; then
+           -X POST "http://supervisor/addons/${ASTERISK_SLUG}/restart" >/dev/null; then  # ← ИСПОЛЬЗУЕМ ПЕРЕМЕННУЮ
             log info "✓ Asterisk restart command sent successfully"
         else
             log warning "⚠ Could not restart Asterisk (addon might not exist or be unavailable)"
@@ -169,4 +169,3 @@ fi
 
 log info "=== SSL SYNC COMPLETED SUCCESSFULLY ==="
 log info "Addon will now exit. Next run scheduled via automation."
-
