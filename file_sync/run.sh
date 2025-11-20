@@ -65,37 +65,102 @@ export TZ
 
 # ==================== ОПРЕДЕЛЕНИЕ ПУТЕЙ ====================
 
-# Источник: файлы NPM addon
-SRC_BASE="/mnt/data/supervisor/addons/data/${SRC_ADDON}"
-SRC_DIR="${SRC_BASE}/${SRC_REL_PATH}"
+# Возможные расположения данных аддонов в HAOS
+POSSIBLE_BASE_PATHS=(
+    "/mnt/data/supervisor/addons/data/${SRC_ADDON}"
+    "/mnt/data/addons/data/${SRC_ADDON}"
+    "/data/${SRC_ADDON}"
+    "/usr/share/hassio/addons/data/${SRC_ADDON}"
+    "/addons/${SRC_ADDON}"
+)
 
 # Назначение: папка в общем SSL volume
 DEST_DIR="/ssl/${DEST_REL}"
 
 log_info "Configuration:"
 log_info "  Source Addon: $SRC_ADDON"
-log_info "  Source Path: $SRC_DIR"
+log_info "  Source Relative Path: $SRC_REL_PATH"
 log_info "  Destination: $DEST_DIR"
 log_info "  Asterisk Addon: $ASTERISK_ADDON"
 log_info "  Interval: ${INTERVAL}s"
 log_info "  Restart Asterisk: $RESTART_ASTERISK"
 
+# ==================== ФУНКЦИЯ ПОИСКА ПУТИ ИСТОЧНИКА ====================
+
+find_source_path() {
+    log_info "Searching for source directory..."
+    
+    local found_path=""
+    
+    for base_path in "${POSSIBLE_BASE_PATHS[@]}"; do
+        local full_path="${base_path}/${SRC_REL_PATH}"
+        log_debug "Checking: $full_path"
+        
+        if [ -d "$full_path" ]; then
+            found_path="$full_path"
+            log_info "✓ Found source directory: $found_path"
+            break
+        fi
+    done
+    
+    if [ -z "$found_path" ]; then
+        log_error "✗ Source directory not found in any location"
+        log_error "Searched in:"
+        for base_path in "${POSSIBLE_BASE_PATHS[@]}"; do
+            local full_path="${base_path}/${SRC_REL_PATH}"
+            log_error "  - $full_path"
+        done
+        
+        # Покажем какие аддоны вообще доступны
+        log_error "Available addon data directories:"
+        local available_dirs=()
+        
+        # Проверяем основные корневые директории
+        local root_paths=(
+            "/mnt/data/supervisor/addons/data"
+            "/mnt/data/addons/data" 
+            "/data"
+            "/usr/share/hassio/addons/data"
+            "/addons"
+        )
+        
+        for root_path in "${root_paths[@]}"; do
+            if [ -d "$root_path" ]; then
+                log_error "  In $root_path:"
+                if find "$root_path" -maxdepth 1 -type d 2>/dev/null | head -10 | while read dir; do
+                    if [ "$dir" != "$root_path" ] && [ -n "$dir" ]; then
+                        log_error "    - $(basename "$dir")"
+                    fi
+                done; then
+                    :
+                else
+                    log_error "    (cannot list or empty)"
+                fi
+            fi
+        done
+    fi
+    
+    echo "$found_path"
+}
+
 # ==================== ФУНКЦИЯ ПРОВЕРКИ ДОСТУПНОСТИ ИСТОЧНИКА ====================
 
 check_source_availability() {
-    log_info "Checking if source directory exists..."
+    local src_dir="$1"
     
-    if [ -d "$SRC_DIR" ]; then
-        log_info "✓ Source directory found: $SRC_DIR"
+    log_info "Checking source directory: $src_dir"
+    
+    if [ -d "$src_dir" ]; then
+        log_info "✓ Source directory exists"
         
         # Проверяем наличие сертификатных файлов
         local cert_files=("privkey.pem" "fullchain.pem")
         local missing_files=()
         
         for cert_file in "${cert_files[@]}"; do
-            if [ -f "${SRC_DIR}/${cert_file}" ]; then
-                local file_size=$(stat -c%s "${SRC_DIR}/${cert_file}" 2>/dev/null || echo 0)
-                log_debug "✓ $cert_file: $file_size bytes"
+            if [ -f "${src_dir}/${cert_file}" ]; then
+                local file_size=$(stat -c%s "${src_dir}/${cert_file}" 2>/dev/null || echo 0)
+                log_info "✓ $cert_file: $file_size bytes"
             else
                 log_warning "✗ $cert_file not found in source"
                 missing_files+=("$cert_file")
@@ -110,13 +175,7 @@ check_source_availability() {
             return 1
         fi
     else
-        log_error "✗ Source directory not found: $SRC_DIR"
-        log_error "Available addon data directories:"
-        find "/mnt/data/supervisor/addons/data" -maxdepth 1 -type d 2>/dev/null | while read dir; do
-            if [ "$dir" != "/mnt/data/supervisor/addons/data" ]; then
-                log_error "  - $(basename "$dir")"
-            fi
-        done
+        log_error "✗ Source directory not accessible"
         return 1
     fi
 }
@@ -124,16 +183,17 @@ check_source_availability() {
 # ==================== ФУНКЦИЯ СИНХРОНИЗАЦИИ СЕРТИФИКАТОВ ====================
 
 sync_certificates() {
+    local src_dir="$1"
     local changed=false
     
-    log_debug "Starting certificate sync..."
+    log_debug "Starting certificate sync from: $src_dir"
     
     # Создаем целевую директорию если не существует
     mkdir -p "$DEST_DIR"
     
     # Синхронизируем каждый файл
     for cert_file in "privkey.pem" "fullchain.pem"; do
-        local src_file="${SRC_DIR}/${cert_file}"
+        local src_file="${src_dir}/${cert_file}"
         local dest_file="${DEST_DIR}/${cert_file}"
         local temp_file="${dest_file}.tmp"
         
@@ -189,11 +249,19 @@ restart_asterisk() {
         
         # Пробуем получить токен для перезапуска
         local supervisor_token=""
-        if [ -r "/mnt/data/supervisor/token" ]; then
-            supervisor_token=$(cat "/mnt/data/supervisor/token")
-        elif [ -r "/run/s6/container_environment/SUPERVISOR_TOKEN" ]; then
-            supervisor_token=$(cat "/run/s6/container_environment/SUPERVISOR_TOKEN")
-        fi
+        local token_paths=(
+            "/mnt/data/supervisor/token"
+            "/run/s6/container_environment/SUPERVISOR_TOKEN"
+            "/etc/SUPERVISOR_TOKEN"
+        )
+        
+        for token_path in "${token_paths[@]}"; do
+            if [ -r "$token_path" ]; then
+                supervisor_token=$(cat "$token_path")
+                log_debug "Found token at: $token_path"
+                break
+            fi
+        done
         
         if [ -n "$supervisor_token" ]; then
             if curl -s -f -H "Authorization: Bearer ${supervisor_token}" \
@@ -237,8 +305,15 @@ check_certificates() {
 
 log_info "=== STARTING MAIN SYNC LOOP ==="
 
+# Ищем путь к исходным файлам
+SRC_DIR=$(find_source_path)
+if [ -z "$SRC_DIR" ]; then
+    log_error "Source path not found. Exiting."
+    exit 1
+fi
+
 # Проверяем доступность источника
-if ! check_source_availability; then
+if ! check_source_availability "$SRC_DIR"; then
     log_error "Source not available. Exiting."
     exit 1
 fi
@@ -258,7 +333,7 @@ while true; do
     log_debug "=== Sync cycle $CYCLE_COUNT started ==="
     
     # Выполняем синхронизацию
-    if CHANGED=$(sync_certificates); then
+    if CHANGED=$(sync_certificates "$SRC_DIR"); then
         if [ "$CHANGED" = "true" ] || [ "$FIRST_RUN" = "true" ]; then
             if [ "$FIRST_RUN" = "true" ]; then
                 log_info "✓ Initial certificate sync completed"
