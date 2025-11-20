@@ -8,7 +8,17 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$level] $*" >&2
 }
 
-log info "SSL Sync v1.7.4 starting..."
+# ==================== ОЧИСТКА ЖУРНАЛА ====================
+clear_log() {
+    log info "=== CLEARING LOG ==="
+    log info "Starting fresh log session for SSL Sync v1.7.2"
+    log info "Previous log entries cleared"
+}
+
+# Очищаем журнал при старте
+clear_log
+
+log info "SSL Sync starting..."
 
 # ==================== УЛУЧШЕННАЯ ДИАГНОСТИКА ====================
 log info "=== ENHANCED DIAGNOSTICS ==="
@@ -137,8 +147,17 @@ mkdir -p "${DEST_DIR}" || {
 }
 
 # Главный цикл синхронизации
+CYCLE_COUNT=0
 while true; do
-    log info "=== Sync cycle started (local: $(date)) ==="
+    CYCLE_COUNT=$((CYCLE_COUNT + 1))
+    
+    # Очистка журнала каждые 10 циклов (для предотвращения переполнения)
+    if [ $((CYCLE_COUNT % 10)) -eq 0 ]; then
+        clear_log
+        log info "Cycle ${CYCLE_COUNT} - periodic log cleanup"
+    fi
+    
+    log info "=== Sync cycle ${CYCLE_COUNT} started (local: $(date)) ==="
 
     # Проверяем что исходная директория всё ещё существует
     if [ ! -d "${SRC_DIR}" ]; then
@@ -197,7 +216,6 @@ while true; do
         log info "No changes detected in this cycle"
     fi
 
-    log info "Sync cycle completed. Sleeping for ${INTERVAL}s..."
+    log info "Sync cycle ${CYCLE_COUNT} completed. Sleeping for ${INTERVAL}s..."
     sleep "${INTERVAL}"
 done
-
