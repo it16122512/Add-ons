@@ -5,58 +5,59 @@ set -e
 log() {
     local level="$1"
     shift
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$level] $*" >&2
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$level] $*"
 }
 
-# Очистка журнала
-clear_log() {
-    log info "=== CLEARING LOG ==="
-    log info "Starting fresh log session for SSL Sync v2.1.0"
-    log info "Previous log entries cleared"
-}
-
-clear_log
 log info "SSL Sync starting..."
 
-# ==================== ПОЛУЧЕНИЕ КОНФИГУРАЦИИ ====================
-SRC_REL=$(bashio::config 'source_relative_path' 2>/dev/null || echo "letsencrypt/live/npm-8")
-DEST_REL=$(bashio::config 'dest_relative_path' 2>/dev/null || echo "nginxproxymanager/live/npm-1")
-INTERVAL=$(bashio::config 'interval_seconds' 2>/dev/null || echo "300")
-TZ=$(bashio::config 'timezone' 2>/dev/null || echo "UTC")
+# Получаем конфигурацию через bashio
+SRC_REL=$(bashio::config 'source_relative_path')
+DEST_REL=$(bashio::config 'dest_relative_path')
+INTERVAL=$(bashio::config 'interval_seconds')
+TZ=$(bashio::config 'timezone' 'UTC')
+
+# Timezone
 export TZ
+log info "Timezone set to $TZ (local time: $(date))"
 
-log info "Configuration:"
-log info "  source_relative_path: $SRC_REL"
-log info "  dest_relative_path: $DEST_REL"
-log info "  interval_seconds: $INTERVAL"
-log info "  timezone: $TZ"
+# Graceful shutdown
+cleanup() {
+    log info "Graceful stop received"
+    exit 0
+}
+trap cleanup TERM INT
 
-# ==================== ПУТИ ====================
-SRC_ROOT="/addon_config"  # используем addon_config
+# Конфигурация путей
+SRC_ROOT="/addon_config"
 DEST_ROOT="/ssl"
 SRC_DIR="${SRC_ROOT}/${SRC_REL}"
 DEST_DIR="${DEST_ROOT}/${DEST_REL}"
 
-log info "Full paths:"
-log info "  Source: $SRC_DIR"
-log info "  Destination: $DEST_DIR"
-
-# Проверка исходного пути
-if [ ! -d "${SRC_DIR}" ]; then
-    log error "✗ Source directory missing: $SRC_DIR"
+# Проверка обязательных параметров
+if [ -z "$SRC_REL" ] || [ -z "$DEST_REL" ]; then
+    log error "Source or destination path not configured!"
     exit 1
 fi
 
+log info "Config: ${SRC_DIR} -> ${DEST_DIR} (interval: ${INTERVAL}s)"
+
+echo "Creating destination: ${DEST_DIR}"
 mkdir -p "${DEST_DIR}" || {
-    log error "Cannot create destination directory ${DEST_DIR}"
+    echo "ERROR: Cannot create destination directory ${DEST_DIR}"
     exit 1
 }
 
-# ==================== ЦИКЛ СИНХРОНИЗАЦИИ ====================
-CYCLE_COUNT=0
+# Главный цикл
 while true; do
-    CYCLE_COUNT=$((CYCLE_COUNT + 1))
-    log info "=== Sync cycle ${CYCLE_COUNT} started (local: $(date)) ==="
+    log info "=== Sync cycle (local: $(date)) ==="
+
+    if [ ! -d "${SRC_DIR}" ]; then
+        log warning "Source directory missing: ${SRC_DIR}"
+        sleep 60
+        continue
+    fi
+
+    mkdir -p "${DEST_DIR}" || log warning "Cannot create destination: ${DEST_DIR}"
 
     CHANGED=false
     for f in privkey.pem fullchain.pem; do
@@ -64,9 +65,19 @@ while true; do
         DEST_FILE="${DEST_DIR}/${f}"
 
         if [ -f "${SRC_FILE}" ]; then
-            if [ ! -f "${DEST_FILE}" ] || ! cmp -s "${SRC_FILE}" "${DEST_FILE}" 2>/dev/null; then
-                log info "Copying ${f}..."
-                cp -f "${SRC_FILE}" "${DEST_FILE}" && CHANGED=true
+            SRC_SIZE=$(stat -c%s "${SRC_FILE}" 2>/dev/null || echo "0")
+            if [ "$SRC_SIZE" -eq 0 ]; then
+                log warning "Source file is empty: ${f}"
+                continue
+            fi
+
+            if ! cmp -s "${SRC_FILE}" "${DEST_FILE}" 2>/dev/null; then
+                if cp -f "${SRC_FILE}" "${DEST_FILE}"; then
+                    log info "Updated ${f} (size: ${SRC_SIZE} bytes)"
+                    CHANGED=true
+                else
+                    log error "Failed to copy ${f}"
+                fi
             else
                 log info "No changes for ${f}"
             fi
@@ -76,16 +87,10 @@ while true; do
     done
 
     if [ "${CHANGED}" = true ]; then
-        log info "Changes detected, attempting to restart Asterisk..."
-        TOKEN=$(bashio::supervisor_token 2>/dev/null || echo "")
-        if [ -n "$TOKEN" ]; then
-            curl -s -f -H "Authorization: Bearer ${TOKEN}" \
-                 -X POST "http://supervisor/addons/b35499aa_asterisk/restart" >/dev/null 2>&1 \
-                 && log info "Asterisk restart command sent successfully"
-        fi
+        log info "Changes detected, consider notifying or restarting services here..."
+        # если нужен curl для supervisor API, можно добавить здесь
     fi
 
-    log info "Sync cycle ${CYCLE_COUNT} completed. Sleeping ${INTERVAL}s..."
+    log info "Cycle completed. Sleeping for ${INTERVAL}s..."
     sleep "${INTERVAL}"
 done
-
