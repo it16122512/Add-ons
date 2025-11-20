@@ -46,7 +46,7 @@ log_debug() { log debug "$*"; }
 
 clear_log() {
     log_info "=== SSL Sync Starting ==="
-    log_info "Using Supervisor API method"
+    log_info "Using direct filesystem access method"
     log_debug "Debug logging enabled"
 }
 
@@ -63,87 +63,62 @@ RESTART_ASTERISK=$(bashio::config 'restart_asterisk')
 
 export TZ
 
-# ==================== ПОЛУЧЕНИЕ SUPERVISOR TOKEN ====================
+# ==================== ОПРЕДЕЛЕНИЕ ПУТЕЙ ====================
 
-SUPERVISOR_TOKEN=""
+# Источник: файлы NPM addon
+SRC_BASE="/mnt/data/supervisor/addons/data/${SRC_ADDON}"
+SRC_DIR="${SRC_BASE}/${SRC_REL_PATH}"
 
-# Метод 1: Пытаемся получить токен из переменной окружения
-if [ -n "${SUPERVISOR_TOKEN:-}" ]; then
-    SUPERVISOR_TOKEN="${SUPERVISOR_TOKEN}"
-    log_info "Using Supervisor token from environment variable"
-    log_debug "Token from SUPERVISOR_TOKEN environment variable"
-
-# Метод 2: Пытаемся использовать bashio (если доступен)
-elif command -v bashio::supervisor.token >/dev/null 2>&1 && bashio::var.has_value "$(bashio::supervisor.token)"; then
-    SUPERVISOR_TOKEN=$(bashio::supervisor.token)
-    log_info "Using Supervisor token from bashio"
-    log_debug "Token from bashio::supervisor.token"
-
-else
-    log_error "Cannot obtain Supervisor token"
-    log_error "Available methods:"
-    log_error "1. SUPERVISOR_TOKEN environment variable: ${SUPERVISOR_TOKEN:+SET}"
-    log_error "2. bashio::supervisor.token: $(command -v bashio::supervisor.token >/dev/null 2>&1 && echo 'AVAILABLE' || echo 'NOT_AVAILABLE')"
-    log_error "3. Manual token in configuration"
-    exit 1
-fi
-
-# Проверяем что токен не пустой
-if [ -z "$SUPERVISOR_TOKEN" ]; then
-    log_error "Supervisor token is empty"
-    exit 1
-fi
-
-log_debug "Supervisor token obtained successfully (starts with: ${SUPERVISOR_TOKEN:0:10}...)"
-
+# Назначение: папка в общем SSL volume
 DEST_DIR="/ssl/${DEST_REL}"
-mkdir -p "$DEST_DIR"
 
 log_info "Configuration:"
 log_info "  Source Addon: $SRC_ADDON"
-log_info "  Source Path: $SRC_REL_PATH"
+log_info "  Source Path: $SRC_DIR"
 log_info "  Destination: $DEST_DIR"
 log_info "  Asterisk Addon: $ASTERISK_ADDON"
 log_info "  Interval: ${INTERVAL}s"
 log_info "  Restart Asterisk: $RESTART_ASTERISK"
-log_info "  Token Source: $([ -n "${SUPERVISOR_TOKEN:-}" ] && echo "environment" || echo "bashio")"
 
-# ==================== ФУНКЦИЯ ПРОВЕРКИ ДОСТУПНОСТИ АДДОНОВ ====================
+# ==================== ФУНКЦИЯ ПРОВЕРКИ ДОСТУПНОСТИ ИСТОЧНИКА ====================
 
-check_addon_availability() {
-    local addon_slug="$1"
-    local addon_type="$2"
+check_source_availability() {
+    log_info "Checking if source directory exists..."
     
-    log_info "Checking if $addon_type addon ($addon_slug) is available..."
-    
-    if curl -s -f -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" \
-        "http://supervisor/addons/${addon_slug}/info" >/dev/null 2>&1; then
-        log_info "✓ $addon_type addon ($addon_slug) is available"
-        return 0
+    if [ -d "$SRC_DIR" ]; then
+        log_info "✓ Source directory found: $SRC_DIR"
+        
+        # Проверяем наличие сертификатных файлов
+        local cert_files=("privkey.pem" "fullchain.pem")
+        local missing_files=()
+        
+        for cert_file in "${cert_files[@]}"; do
+            if [ -f "${SRC_DIR}/${cert_file}" ]; then
+                local file_size=$(stat -c%s "${SRC_DIR}/${cert_file}" 2>/dev/null || echo 0)
+                log_debug "✓ $cert_file: $file_size bytes"
+            else
+                log_warning "✗ $cert_file not found in source"
+                missing_files+=("$cert_file")
+            fi
+        done
+        
+        if [ ${#missing_files[@]} -eq 0 ]; then
+            log_info "✓ All certificate files are available"
+            return 0
+        else
+            log_warning "Missing files: ${missing_files[*]}"
+            return 1
+        fi
     else
-        log_error "✗ $addon_type addon ($addon_slug) not found or inaccessible"
+        log_error "✗ Source directory not found: $SRC_DIR"
+        log_error "Available addon data directories:"
+        find "/mnt/data/supervisor/addons/data" -maxdepth 1 -type d 2>/dev/null | while read dir; do
+            if [ "$dir" != "/mnt/data/supervisor/addons/data" ]; then
+                log_error "  - $(basename "$dir")"
+            fi
+        done
         return 1
     fi
-}
-
-# ==================== ФУНКЦИЯ ПРОВЕРКИ ТОКЕНА ====================
-
-validate_token() {
-    log_debug "Validating Supervisor token..."
-    
-    # Пробуем разные эндпоинты для проверки
-    local endpoints=("info" "addons" "core/info" "host/info")
-    
-    for endpoint in "${endpoints[@]}"; do
-        if curl -s -f -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" \
-            "http://supervisor/${endpoint}" >/dev/null 2>&1; then
-            log_debug "✓ Supervisor token validated via /${endpoint}"
-            return 0
-        fi
-    done
-    
-    log_error "✗ Supervisor token validation failed on all endpoints"
-    return 1
 }
 
 # ==================== ФУНКЦИЯ СИНХРОНИЗАЦИИ СЕРТИФИКАТОВ ====================
@@ -151,46 +126,44 @@ validate_token() {
 sync_certificates() {
     local changed=false
     
-    # Проверяем доступность файлов перед копированием
-    log_debug "Checking certificate files availability..."
+    log_debug "Starting certificate sync..."
     
-    for cert_file in "privkey.pem" "fullchain.pem"; do
-        if curl -s -f -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" \
-            "http://supervisor/addons/${SRC_ADDON}/files/${SRC_REL_PATH}/${cert_file}" >/dev/null 2>&1; then
-            log_debug "✓ $cert_file is available"
-        else
-            log_warning "✗ $cert_file not available in addon"
-            return 1
-        fi
-    done
+    # Создаем целевую директорию если не существует
+    mkdir -p "$DEST_DIR"
     
     # Синхронизируем каждый файл
     for cert_file in "privkey.pem" "fullchain.pem"; do
-        local src_url="http://supervisor/addons/${SRC_ADDON}/files/${SRC_REL_PATH}/${cert_file}"
+        local src_file="${SRC_DIR}/${cert_file}"
         local dest_file="${DEST_DIR}/${cert_file}"
         local temp_file="${dest_file}.tmp"
         
-        log_debug "Processing $cert_file from $src_url"
+        log_debug "Processing $cert_file"
         
-        # Скачиваем во временный файл
-        if curl -s -f -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" \
-            -o "$temp_file" "$src_url"; then
-            
-            # Проверяем размер файла
-            local file_size=$(stat -c%s "$temp_file" 2>/dev/null || echo 0)
-            log_debug "Downloaded $cert_file: $file_size bytes"
-            
-            if [ "$file_size" -lt 100 ]; then
-                log_warning "File $cert_file is too small ($file_size bytes), skipping"
-                rm -f "$temp_file"
-                continue
-            fi
+        # Проверяем существование исходного файла
+        if [ ! -f "$src_file" ]; then
+            log_warning "Source file not found: $src_file"
+            continue
+        fi
+        
+        # Проверяем размер исходного файла
+        local file_size=$(stat -c%s "$src_file" 2>/dev/null || echo 0)
+        if [ "$file_size" -lt 100 ]; then
+            log_warning "File $cert_file is too small ($file_size bytes), skipping"
+            continue
+        fi
+        
+        # Копируем во временный файл
+        if cp "$src_file" "$temp_file"; then
+            log_debug "Copied $cert_file: $file_size bytes"
             
             # Сравниваем с существующим файлом
             if [ ! -f "$dest_file" ] || ! cmp -s "$temp_file" "$dest_file" 2>/dev/null; then
                 if mv -f "$temp_file" "$dest_file"; then
                     log_info "✓ Updated $cert_file ($file_size bytes)"
                     changed=true
+                    
+                    # Устанавливаем правильные права
+                    chmod 644 "$dest_file"
                 else
                     log_error "Failed to move $cert_file"
                     rm -f "$temp_file"
@@ -200,7 +173,7 @@ sync_certificates() {
                 rm -f "$temp_file"
             fi
         else
-            log_error "Failed to download $cert_file"
+            log_error "Failed to copy $cert_file"
             rm -f "$temp_file"
         fi
     done
@@ -212,13 +185,26 @@ sync_certificates() {
 
 restart_asterisk() {
     if [ "$RESTART_ASTERISK" = "true" ]; then
-        log_info "Attempting to restart Asterisk ($ASTERISK_ADDON)..."
+        log_info "Attempting to restart Asterisk using Supervisor API..."
         
-        if curl -s -f -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" \
-            -X POST "http://supervisor/addons/${ASTERISK_ADDON}/restart" >/dev/null 2>&1; then
-            log_info "✓ Asterisk ($ASTERISK_ADDON) restart command sent successfully"
+        # Пробуем получить токен для перезапуска
+        local supervisor_token=""
+        if [ -r "/mnt/data/supervisor/token" ]; then
+            supervisor_token=$(cat "/mnt/data/supervisor/token")
+        elif [ -r "/run/s6/container_environment/SUPERVISOR_TOKEN" ]; then
+            supervisor_token=$(cat "/run/s6/container_environment/SUPERVISOR_TOKEN")
+        fi
+        
+        if [ -n "$supervisor_token" ]; then
+            if curl -s -f -H "Authorization: Bearer ${supervisor_token}" \
+                -X POST "http://supervisor/addons/${ASTERISK_ADDON}/restart" >/dev/null 2>&1; then
+                log_info "✓ Asterisk ($ASTERISK_ADDON) restart command sent successfully"
+            else
+                log_warning "⚠ Could not restart Asterisk via API - may be offline"
+            fi
         else
-            log_warning "⚠ Could not restart Asterisk ($ASTERISK_ADDON) - may be offline or not installed"
+            log_warning "⚠ No Supervisor token available for Asterisk restart"
+            log_info "Asterisk will need to be restarted manually to use new certificates"
         fi
     fi
 }
@@ -239,7 +225,7 @@ check_certificates() {
                 valid=false
             fi
         else
-            log_warning "⚠ $cert_file not found"
+            log_warning "⚠ $cert_file not found in destination"
             valid=false
         fi
     done
@@ -251,24 +237,15 @@ check_certificates() {
 
 log_info "=== STARTING MAIN SYNC LOOP ==="
 
-# Проверяем валидность токена
-if ! validate_token; then
-    log_error "Supervisor token validation failed. Exiting."
+# Проверяем доступность источника
+if ! check_source_availability; then
+    log_error "Source not available. Exiting."
     exit 1
-fi
-
-# Проверяем доступность обоих аддонов
-if ! check_addon_availability "$SRC_ADDON" "NPM Source"; then
-    log_error "Source addon not available. Exiting."
-    exit 1
-fi
-
-if ! check_addon_availability "$ASTERISK_ADDON" "Asterisk"; then
-    log_warning "Asterisk addon not available, continuing without restart capability"
-    RESTART_ASTERISK=false
 fi
 
 CYCLE_COUNT=0
+FIRST_RUN=true
+
 while true; do
     CYCLE_COUNT=$((CYCLE_COUNT + 1))
     
@@ -282,12 +259,17 @@ while true; do
     
     # Выполняем синхронизацию
     if CHANGED=$(sync_certificates); then
-        if [ "$CHANGED" = "true" ]; then
-            log_info "✓ Certificate changes detected and applied"
+        if [ "$CHANGED" = "true" ] || [ "$FIRST_RUN" = "true" ]; then
+            if [ "$FIRST_RUN" = "true" ]; then
+                log_info "✓ Initial certificate sync completed"
+                FIRST_RUN=false
+            else
+                log_info "✓ Certificate changes detected and applied"
+            fi
             
             # Проверяем что сертификаты валидны
             if check_certificates; then
-                # Перезапускаем Asterisk если нужно и доступен
+                # Перезапускаем Asterisk если нужно
                 restart_asterisk
             else
                 log_warning "New certificates appear invalid, skipping Asterisk restart"
