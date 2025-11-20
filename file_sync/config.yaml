@@ -7,8 +7,10 @@ arch:
   - aarch64
   - amd64
   - armv7
-# УДАЛЕНО: build_from - не нужно, используем стандартный базовый образ
-image: ghcr.io/home-assistant/{arch}-base:3.2.7  # ← ПРОСТОЙ ПОДХОД как в Filebrowser
+build_from:
+  aarch64: "ghcr.io/home-assistant/aarch64-base:3.2.7"
+  amd64: "ghcr.io/home-assistant/amd64-base:3.2.7"
+  armv7: "ghcr.io/home-assistant/armv7-base:3.2.7"
 startup: services
 boot: auto
 init: false
@@ -18,10 +20,15 @@ privileged:
   - SYS_ADMIN
   - DAC_READ_SEARCH
 
-# Оптимизированные монтирования (только необходимые)
+# КЛЮЧЕВОЕ ИЗМЕНЕНИЕ - даем полный доступ как Filebrowser
 map:
-  - addon_configs:rw  # ← ОСНОВНОЙ путь к NPM
-  - ssl:rw            # ← Целевой путь для Asterisk
+  - config:ro
+  - ssl:rw
+  - share:ro
+  - addon_config:ro
+  - addon_configs:ro
+  - all_addon_configs:ro
+  
 
 options:
   source_relative_path: "a0d7b954_nginxproxymanager/letsencrypt/live/npm-8"
@@ -29,7 +36,6 @@ options:
   interval_seconds: 300
   log_level: info
   timezone: "Europe/Moscow"
-  restart_asterisk: true
 
 schema:
   source_relative_path: str
@@ -37,4 +43,4 @@ schema:
   interval_seconds: int(60,3600)
   log_level: list(info|debug|warning|error)
   timezone: str
-  restart_asterisk: bool
+  
