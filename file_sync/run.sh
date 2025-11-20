@@ -33,14 +33,14 @@ log info "=== CONFIGURATION ==="
 # Получаем конфигурацию
 SRC_REL=$(bashio::config 'source_relative_path')
 DEST_REL=$(bashio::config 'dest_relative_path')
-ASTERISK_SLUG=$(bashio::config 'asterisk_addon_slug')  # ← ДОБАВИЛ получение slug Asterisk
+ASTERISK_SLUG=$(bashio::config 'asterisk_addon_slug')
 TZ=$(bashio::config 'timezone' 'UTC')
 
 export TZ
 log info "Configuration:"
 log info "  source_relative_path: $SRC_REL"
 log info "  dest_relative_path: $DEST_REL"
-log info "  asterisk_addon_slug: $ASTERISK_SLUG"  # ← ДОБАВИЛ в логирование
+log info "  asterisk_addon_slug: $ASTERISK_SLUG"
 log info "  timezone: $TZ"
 
 # ==================== ПОИСК NPM СЕРТИФИКАТОВ ====================
@@ -153,9 +153,9 @@ if [ "$CHANGED" = true ]; then
     # Перезапуск Asterisk через Supervisor API
     TOKEN=$(bashio::supervisor.token 2>/dev/null || echo "")
     if [ -n "$TOKEN" ]; then
-        log info "Sending restart command to Asterisk addon: $ASTERISK_SLUG"  # ← ИСПОЛЬЗУЕМ ПЕРЕМЕННУЮ
+        log info "Sending restart command to Asterisk addon: $ASTERISK_SLUG"
         if curl -s -f -H "Authorization: Bearer $TOKEN" \
-           -X POST "http://supervisor/addons/${ASTERISK_SLUG}/restart" >/dev/null; then  # ← ИСПОЛЬЗУЕМ ПЕРЕМЕННУЮ
+           -X POST "http://supervisor/addons/${ASTERISK_SLUG}/restart" >/dev/null; then
             log info "✓ Asterisk restart command sent successfully"
         else
             log warning "⚠ Could not restart Asterisk (addon might not exist or be unavailable)"
@@ -168,4 +168,30 @@ else
 fi
 
 log info "=== SSL SYNC COMPLETED SUCCESSFULLY ==="
-log info "Addon will now exit. Next run scheduled via automation."
+
+# ==================== ЯВНАЯ ОСТАНОВКА АДОНА ====================
+log info "Stopping this addon via Supervisor API..."
+
+TOKEN=$(bashio::supervisor.token 2>/dev/null || echo "")
+if [ -n "$TOKEN" ]; then
+    # Получаем собственный slug адона
+    SELF_SLUG=$(bashio::addon.slug 2>/dev/null || echo "")
+    
+    if [ -n "$SELF_SLUG" ]; then
+        log info "Sending stop command for addon: $SELF_SLUG"
+        if curl -s -f -H "Authorization: Bearer $TOKEN" \
+           -X POST "http://supervisor/addons/${SELF_SLUG}/stop" >/dev/null; then
+            log info "✓ Stop command sent successfully"
+        else
+            log warning "⚠ Could not send stop command via API"
+        fi
+    else
+        log info "ℹ Could not determine own addon slug"
+    fi
+else
+    log info "ℹ Supervisor token not available for stop command"
+fi
+
+# Дополнительно: завершаем процесс с ненулевым кодом, чтобы предотвратить перезапуск
+log info "Addon completed. Exiting with code 1 to prevent auto-restart."
+exit 1
