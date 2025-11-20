@@ -43,13 +43,6 @@ log info "  dest_relative_path: $DEST_REL"
 log info "  interval_seconds: $INTERVAL"
 log info "  timezone: $TZ"
 
-# Graceful shutdown
-cleanup() {
-    log info "Graceful stop received"
-    exit 0
-}
-trap cleanup TERM INT
-
 # ==================== ПОИСК NPM СЕРТИФИКАТОВ ====================
 log info "=== SEARCHING FOR NPM CERTIFICATES ==="
 
@@ -128,72 +121,51 @@ mkdir -p "$DEST_DIR" || {
     exit 1
 }
 
-# ==================== ОСНОВНОЙ ЦИКЛ ====================
-log info "=== STARTING MAIN SYNC LOOP ==="
+# ==================== ОДИН ЦИКЛ СИНХРОНИЗАЦИИ ====================
+log info "=== STARTING SINGLE SYNC CYCLE ==="
 
-CYCLE_COUNT=0
-while true; do
-    CYCLE_COUNT=$((CYCLE_COUNT + 1))
-    
-    log info "=== Sync cycle $CYCLE_COUNT started ==="
+CHANGED=false
+for cert_file in privkey.pem fullchain.pem; do
+    SRC_FILE="$SRC_DIR/$cert_file"
+    DEST_FILE="$DEST_DIR/$cert_file"
 
-    # Проверяем что исходная директория существует
-    if [ ! -d "$SRC_DIR" ]; then
-        log error "Source directory disappeared: $SRC_DIR"
-        log info "Attempting to rediscover source directory..."
-        NEW_SRC_DIR=$(find_npm_certificates "$SRC_REL")
-        if [ -n "$NEW_SRC_DIR" ]; then
-            log info "Rediscovered source directory: $NEW_SRC_DIR"
-            SRC_DIR="$NEW_SRC_DIR"
-        else
-            sleep 60
-            continue
-        fi
-    fi
-
-    CHANGED=false
-    for cert_file in privkey.pem fullchain.pem; do
-        SRC_FILE="$SRC_DIR/$cert_file"
-        DEST_FILE="$DEST_DIR/$cert_file"
-
-        if [ -f "$SRC_FILE" ]; then
-            if [ ! -f "$DEST_FILE" ] || ! cmp -s "$SRC_FILE" "$DEST_FILE"; then
-                log info "Updating $cert_file..."
-                if cp -f "$SRC_FILE" "$DEST_FILE"; then
-                    COPIED_SIZE=$(stat -c%s "$DEST_FILE" 2>/dev/null || echo "unknown")
-                    log info "✓ Successfully updated $cert_file (${COPIED_SIZE} bytes)"
-                    CHANGED=true
-                else
-                    log error "❌ Failed to copy $cert_file"
-                fi
+    if [ -f "$SRC_FILE" ]; then
+        if [ ! -f "$DEST_FILE" ] || ! cmp -s "$SRC_FILE" "$DEST_FILE"; then
+            log info "Updating $cert_file..."
+            if cp -f "$SRC_FILE" "$DEST_FILE"; then
+                COPIED_SIZE=$(stat -c%s "$DEST_FILE" 2>/dev/null || echo "unknown")
+                log info "✓ Successfully updated $cert_file (${COPIED_SIZE} bytes)"
+                CHANGED=true
             else
-                log info "No changes for $cert_file"
+                log error "❌ Failed to copy $cert_file"
             fi
         else
-            log error "Source file missing: $cert_file"
-        fi
-    done
-
-    if [ "$CHANGED" = true ]; then
-        log info "✓ Certificate changes detected - restarting Asterisk"
-        
-        # Перезапуск Asterisk через Supervisor API
-        TOKEN=$(bashio::supervisor.token 2>/dev/null || echo "")
-        if [ -n "$TOKEN" ]; then
-            log info "Sending restart command to Asterisk..."
-            if curl -s -f -H "Authorization: Bearer $TOKEN" \
-               -X POST "http://supervisor/addons/b35499aa_asterisk/restart" >/dev/null; then
-                log info "✓ Asterisk restart command sent successfully"
-            else
-                log warning "⚠ Could not restart Asterisk (addon might not exist or be unavailable)"
-            fi
-        else
-            log info "ℹ Supervisor token not available"
+            log info "No changes for $cert_file"
         fi
     else
-        log info "No certificate changes detected"
+        log error "Source file missing: $cert_file"
     fi
-
-    log info "Cycle $CYCLE_COUNT completed. Sleeping for ${INTERVAL}s..."
-    sleep "$INTERVAL"
 done
+
+if [ "$CHANGED" = true ]; then
+    log info "✓ Certificate changes detected - restarting Asterisk"
+    
+    # Перезапуск Asterisk через Supervisor API
+    TOKEN=$(bashio::supervisor.token 2>/dev/null || echo "")
+    if [ -n "$TOKEN" ]; then
+        log info "Sending restart command to Asterisk..."
+        if curl -s -f -H "Authorization: Bearer $TOKEN" \
+           -X POST "http://supervisor/addons/b35499aa_asterisk/restart" >/dev/null; then
+            log info "✓ Asterisk restart command sent successfully"
+        else
+            log warning "⚠ Could not restart Asterisk (addon might not exist or be unavailable)"
+        fi
+    else
+        log info "ℹ Supervisor token not available"
+    fi
+else
+    log info "No certificate changes detected"
+fi
+
+log info "=== SSL SYNC COMPLETED SUCCESSFULLY ==="
+log info "Addon will now exit. Next run scheduled via automation."
