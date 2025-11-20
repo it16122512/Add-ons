@@ -1,7 +1,8 @@
+# file_sync/config.yaml
 name: File Sync SSL
 slug: file_sync
-version: "2.0.4"
-description: "Sync SSL certificates using Supervisor API"
+version: "2.0.5"
+description: "Sync SSL certificates using direct filesystem access"
 url: https://github.com/it16122512/Add-ons/file_sync
 arch:
   - aarch64
@@ -14,18 +15,22 @@ build_from:
 startup: services
 boot: auto
 init: false
-hassio_api: true
+hassio_api: false  # Больше не нужен API
 host_network: false
+
+# Убрали ненужные привилегии
+host_dbus: false
+full_access: true  # Оставляем для доступа к файловой системе
 
 map:
   - ssl:rw
+  # backup:rw убран - не нужен для синхронизации сертификатов
 
 options:
   source_addon_slug: "a0d7b954_nginxproxymanager"
   source_cert_path: "letsencrypt/live/npm-8"
   dest_relative_path: "nginxproxymanager/live/npm-1"
   asterisk_addon_slug: "b35499aa_asterisk"
-  
   interval_seconds: 300
   timezone: "Europe/Moscow"
   restart_asterisk: true
@@ -36,7 +41,6 @@ schema:
   source_cert_path: str
   dest_relative_path: str
   asterisk_addon_slug: str
-  supervisor_token: str  # ← Добавлен в schema
   interval_seconds: int(60,3600)
   timezone: str
   restart_asterisk: bool
