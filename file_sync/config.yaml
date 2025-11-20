@@ -1,6 +1,6 @@
 name: File Sync SSL
 slug: file_sync
-version: "2.2.6"  # ←  версия
+version: "2.2.7"  # ←  версия
 description: "Sync SSL certificates from Nginx Proxy Manager to Asterisk"
 url: https://github.com/it16122512/Add-ons/file_sync
 arch:
@@ -27,14 +27,6 @@ map:
   - addon_config:ro
   - addon_configs:ro
   - all_addon_configs:ro
-
-# ДОБАВИТЬ healthcheck для предотвращения перезапуска
-healthcheck:
-  test: ["CMD", "exit", "1"]
-  interval: 60s
-  timeout: 10s
-  retries: 1
-  start_period: 30s
   
 options:
   source_relative_path: "a0d7b954_nginxproxymanager/letsencrypt/live/npm-8"
