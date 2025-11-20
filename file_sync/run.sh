@@ -1,6 +1,18 @@
 #!/usr/bin/with-contenv bashio
 set -e
 
+# Очистка журнала логов при старте
+if [ -w /dev/stdout ]; then
+    echo "=== LOG CLEARED ===" > /dev/stdout
+fi
+
+# Логирование
+log() {
+    local level="$1"
+    shift
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$level] $*" >&2
+}
+
 # Логирование
 log() {
     local level="$1"
