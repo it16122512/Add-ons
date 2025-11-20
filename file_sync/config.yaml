@@ -21,6 +21,7 @@ privileged:
   - SYS_ADMIN
   - DAC_READ_SEARCH
 map:
+  - all_addon_configs:ro
   - addon_config:ro    # ← Конфиги NPM
   - ssl:rw              # ← SSL для Asterisk
 
