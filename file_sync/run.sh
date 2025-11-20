@@ -8,131 +8,133 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$level] $*" >&2
 }
 
-log info "SSL Sync starting with DEBUG..."
+log info "=== SSL Sync starting... ==="
 
-# ==================== ДЕТАЛЬНАЯ ДИАГНОСТИКА ====================
-log info "=== STARTING COMPREHENSIVE DIAGNOSTICS ==="
+# ==================== РАСШИРЕННАЯ ДИАГНОСТИКА МОНТИРОВАНИЯ ====================
+log info "=== EXTENDED MOUNT DIAGNOSTICS ==="
 
-# 1. Проверка базовых директорий
-log info "1. Checking base directories..."
-if [ -d "/addon_configs" ]; then
-    log info "✓ /addon_configs exists"
-    log info "  Permissions: $(ls -ld /addon_configs)"
-else
-    log error "✗ /addon_configs NOT FOUND!"
-    exit 1
-fi
-
-if [ -d "/ssl" ]; then
-    log info "✓ /ssl exists"
-    log info "  Permissions: $(ls -ld /ssl)"
-else
-    log error "✗ /ssl NOT FOUND!"
-    exit 1
-fi
-
-# 2. Полный листинг /addon_configs
-log info "2. Full contents of /addon_configs:"
-ls -la /addon_configs/ 2>/dev/null || log error "Cannot list /addon_configs"
-
-# 3. Поиск всех директорий с nginx/npm в названии
-log info "3. Searching for nginx/npm directories..."
-find /addon_configs -type d -name "*nginx*" -o -name "*npm*" 2>/dev/null | while read dir; do
-    log info "   FOUND DIRECTORY: $dir"
-    log info "     Contents: $(ls "$dir" 2>/dev/null | tr '\n' ' ' || echo "empty/cannot access")"
+# 1. Проверка ВСЕХ директорий в корне
+log info "1. All root directories:"
+ls -la / 2>/dev/null | while read line; do
+    log info "   $line"
 done
 
-# 4. Поиск сертификатов по всему /addon_configs
-log info "4. Searching for certificate files in entire /addon_configs..."
-cert_files=$(find /addon_configs -name "privkey.pem" -o -name "fullchain.pem" 2>/dev/null)
-if [ -n "$cert_files" ]; then
-    log info "   Found certificate files:"
-    echo "$cert_files" | while read file; do
-        if [ -f "$file" ]; then
-            size=$(stat -c%s "$file" 2>/dev/null || echo "unknown")
-            log info "   ✓ $file (size: ${size} bytes)"
-            log info "     Directory: $(dirname "$file")"
-            log info "     Full path components:"
-            IFS='/' read -ra path_parts <<< "$file"
-            for i in "${!path_parts[@]}"; do
-                if [ $i -gt 3 ]; then  # Показываем только релевантные части пути
-                    log info "       [${i}] ${path_parts[$i]}"
-                fi
-            done
+# 2. Проверка конкретных путей с разными вариантами
+log info "2. Checking specific paths:"
+for path in "/addon_configs" "/addon_config" "/config" "/data" "/ssl" "/share" "/media" "/backup"; do
+    if [ -d "$path" ]; then
+        log info "   ✓ EXISTS: $path"
+        log info "     First 3 items: $(ls "$path" 2>/dev/null | head -3 | tr '\n' ' ' || echo "empty")"
+    else
+        log info "   ✗ MISSING: $path"
+    fi
+done
+
+# 3. Проверка монтирования из /proc/mounts
+log info "3. Current mounts:"
+mount | grep -E "(addon|config|data|ssl)" || log info "   No relevant mounts found"
+
+# 4. Проверка через /proc/mounts
+log info "4. /proc/mounts entries:"
+grep -E "(addon|config|data|ssl)" /proc/mounts || log info "   No entries found"
+
+# 5. Проверка через environment
+log info "5. Environment variables:"
+env | grep -i "addon\|config\|data" || log info "   No relevant env vars"
+
+# 6. КРИТИЧЕСКАЯ ПРОВЕРКА - если /addon_configs нет, ищем альтернативы
+if [ ! -d "/addon_configs" ]; then
+    log error "CRITICAL: /addon_configs not found!"
+    
+    # Поиск альтернативных путей
+    log info "6. Searching for alternative paths..."
+    find / -maxdepth 2 -type d -name "*a0d7b954_nginxproxymanager*" -o -name "*addon*" 2>/dev/null | head -10 | while read dir; do
+        log info "   FOUND: $dir"
+    done
+    
+    # Проверка стандартных путей HA
+    log info "7. Checking HA standard paths:"
+    for base in "/config" "/data" "/share" "/media"; do
+        if [ -d "$base" ]; then
+            log info "   Checking $base/addon_configs..."
+            if [ -d "$base/addon_configs" ]; then
+                log info "   ✓ FOUND: $base/addon_configs"
+                # Создаем симлинк
+                ln -sf "$base/addon_configs" /addon_configs 2>/dev/null && log info "   Symlink created: /addon_configs -> $base/addon_configs"
+            fi
         fi
     done
-else
-    log warning "   No certificate files found in /addon_configs"
+    
+    # Финальная проверка
+    if [ ! -d "/addon_configs" ]; then
+        log error "FINAL: /addon_configs still not available after search"
+        log error "Available directories in root:"
+        ls -la / 2>/dev/null | grep "^d" || log error "Cannot list root"
+        exit 1
+    fi
 fi
 
-# 5. Получаем конфигурацию
-log info "5. Reading configuration..."
+log info "✓ /addon_configs is available"
+
+# Проверка /ssl
+if [ ! -d "/ssl" ]; then
+    log error "CRITICAL: /ssl not found!"
+    exit 1
+fi
+
+log info "✓ /ssl is available"
+
+# ==================== ОСНОВНАЯ ДИАГНОСТИКА NPM ====================
+log info "=== NPM CONFIGURATION DIAGNOSTICS ==="
+
+# Получаем конфигурацию
 SRC_REL=$(bashio::config 'source_relative_path')
 DEST_REL=$(bashio::config 'dest_relative_path')
 INTERVAL=$(bashio::config 'interval_seconds')
 TZ=$(bashio::config 'timezone' 'UTC')
 
 export TZ
-log info "   Configuration values:"
-log info "     source_relative_path: $SRC_REL"
-log info "     dest_relative_path: $DEST_REL"
-log info "     interval_seconds: $INTERVAL"
-log info "     timezone: $TZ"
+log info "Configuration:"
+log info "  source_relative_path: $SRC_REL"
+log info "  dest_relative_path: $DEST_REL" 
+log info "  interval_seconds: $INTERVAL"
+log info "  timezone: $TZ"
 
-# 6. Проверка целевых путей
+# Конфигурация путей
 SRC_ROOT="/addon_configs"
 DEST_ROOT="/ssl"
 SRC_DIR="${SRC_ROOT}/${SRC_REL}"
 DEST_DIR="${DEST_ROOT}/${DEST_REL}"
 
-log info "6. Path analysis:"
-log info "   Source: $SRC_DIR"
-log info "   Destination: $DEST_DIR"
+log info "Full paths:"
+log info "  Source: $SRC_DIR"
+log info "  Destination: $DEST_DIR"
 
-# 7. Детальная проверка исходного пути
-log info "7. Detailed source path analysis:"
+# Проверка существования исходного пути
+log info "Checking source path..."
 if [ -d "${SRC_DIR}" ]; then
-    log info "   ✓ Source directory EXISTS"
-    log info "   Contents of source directory:"
-    ls -la "${SRC_DIR}/" 2>/dev/null || log warning "   Cannot list source directory"
+    log info "✓ Source directory exists: $SRC_DIR"
+    log info "Contents: $(ls -la "${SRC_DIR}" 2>/dev/null | head -10 || echo "cannot list")"
     
-    # Проверка конкретных файлов
-    for f in privkey.pem fullchain.pem; do
-        if [ -f "${SRC_DIR}/${f}" ]; then
-            size=$(stat -c%s "${SRC_DIR}/${f}" 2>/dev/null || echo "unknown")
-            log info "   ✓ $f exists (size: ${size} bytes)"
+    # Проверка файлов сертификатов
+    for cert_file in "privkey.pem" "fullchain.pem"; do
+        if [ -f "${SRC_DIR}/${cert_file}" ]; then
+            size=$(stat -c%s "${SRC_DIR}/${cert_file}" 2>/dev/null || echo "unknown")
+            log info "✓ Certificate: $cert_file (size: ${size} bytes)"
         else
-            log warning "   ✗ $f NOT FOUND in source directory"
+            log warning "✗ Missing: $cert_file"
         fi
     done
 else
-    log error "   ✗ Source directory DOES NOT EXIST"
+    log error "✗ Source directory missing: $SRC_DIR"
+    log info "Available directories in /addon_configs:"
+    ls -la "/addon_configs/" 2>/dev/null || log error "Cannot access /addon_configs"
     
-    # Поиск ближайших существующих родительских директорий
-    log info "   Searching for existing parent directories..."
-    current_path="$SRC_ROOT"
-    IFS='/' read -ra path_parts <<< "$SRC_REL"
-    
-    for part in "${path_parts[@]}"; do
-        current_path="${current_path}/${part}"
-        if [ -d "$current_path" ]; then
-            log info "   ✓ Found existing: $current_path"
-            log info "     Contents: $(ls "$current_path" 2>/dev/null | tr '\n' ' ' || echo "empty/cannot access")"
-        else
-            log info "   ✗ Missing: $current_path"
-            break
-        fi
-    done
-fi
-
-# 8. Проверка прав доступа
-log info "8. Permission check:"
-if [ -d "${SRC_DIR}" ]; then
-    log info "   Source dir permissions: $(ls -ld "${SRC_DIR}")"
-    for f in privkey.pem fullchain.pem; do
-        if [ -f "${SRC_DIR}/${f}" ]; then
-            log info "   $f permissions: $(ls -l "${SRC_DIR}/${f}")"
-        fi
+    # Поиск npm-8 в других местах
+    log info "Searching for npm-8 in other locations..."
+    find "/addon_configs" -type d -name "npm-8" 2>/dev/null | while read dir; do
+        log info "   FOUND npm-8: $dir"
+        log info "     Parent: $(dirname "$dir")"
     done
 fi
 
@@ -167,6 +169,10 @@ while true; do
 
     if [ ! -d "${SRC_DIR}" ]; then
         log error "CRITICAL: Source directory still missing: ${SRC_DIR}"
+        log info "Available content in /addon_configs:"
+        find "/addon_configs" -name "*nginx*" -o -name "*npm*" 2>/dev/null | head -10 | while read item; do
+            log info "   Found: $item"
+        done
         log info "Retrying in 60 seconds..."
         sleep 60
         continue
@@ -211,9 +217,20 @@ while true; do
 
     if [ "${CHANGED}" = true ]; then
         log info "✓ Changes detected in certificate files"
-        # Здесь можно добавить логику перезапуска сервисов
-        # TOKEN=$(bashio::supervisor_token)
-        # curl -s -f -H "Authorization: Bearer ${TOKEN}" -X POST "http://supervisor/addons/ADDON_ID/restart"
+        
+        # Автоматический перезапуск Asterisk
+        TOKEN=$(bashio::supervisor_token 2>/dev/null || echo "")
+        if [ -n "$TOKEN" ]; then
+            log info "Attempting to restart Asterisk..."
+            if curl -s -f -H "Authorization: Bearer ${TOKEN}" \
+               -X POST "http://supervisor/addons/b35499aa_asterisk/restart" >/dev/null 2>&1; then
+                log info "✓ Asterisk restart command sent successfully"
+            else
+                log warning "⚠ Could not restart Asterisk (may be normal if token unavailable)"
+            fi
+        else
+            log info "ℹ Supervisor token not available (running in debug?)"
+        fi
     else
         log info "No changes detected in this cycle"
     fi
