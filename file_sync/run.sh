@@ -3,15 +3,11 @@ set -e
 
 # Очистка журнала логов при старте
 if [ -w /dev/stdout ]; then
-    echo "=== LOG CLEARED ===" > /dev/stdout
+    echo -n "" > /dev/stdout
 fi
-
-# Логирование
-log() {
-    local level="$1"
-    shift
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$level] $*" >&2
-}
+if [ -w /dev/stderr ]; then
+    echo -n "" > /dev/stderr
+fi
 
 # Логирование
 log() {
@@ -149,7 +145,7 @@ while true; do
     done
 
     if [ "$CHANGED" = true ]; then
-        log info "✓ Certificate changes detected - restarting Asterisk"
+        log warning "⚠ Certificate changes detected - restarting Asterisk"
         
         # Перезапуск Asterisk через Supervisor API
         TOKEN=$(bashio::supervisor.token 2>/dev/null || echo "")
@@ -159,10 +155,10 @@ while true; do
                -X POST "http://supervisor/addons/${ASTERISK_SLUG}/restart" >/dev/null; then
                 log info "✓ Asterisk restart command sent successfully"
             else
-                log warning "⚠ Could not restart Asterisk (addon might not exist or be unavailable)"
+                log error "❌ CRITICAL: Could not restart Asterisk - certificates updated but Asterisk may be using old ones!"
             fi
         else
-            log info "ℹ Supervisor token not available"
+            log error "❌ CRITICAL: Supervisor token not available - cannot restart Asterisk after certificate update!"
         fi
     else
         log info "No certificate changes detected"
