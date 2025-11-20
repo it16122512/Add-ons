@@ -1,221 +1,253 @@
 #!/usr/bin/with-contenv bashio
 set -e
 
-# Логирование
+# Логирование с поддержкой уровней
 log() {
-    local level="$1"
-    shift
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$level] $*" >&2
-}
-
-# ==================== ОЧИСТКА ЖУРНАЛА ====================
-clear_log() {
-    log info "=== CLEARING LOG ==="
-    log info "Starting fresh log session for SSL Sync v1.7.2"
-    log info "Previous log entries cleared"
-}
-
-# Очищаем журнал при старте
-clear_log
-
-log info "SSL Sync starting..."
-
-# ==================== УЛУЧШЕННАЯ ДИАГНОСТИКА ====================
-log info "=== ENHANCED DIAGNOSTICS ==="
-
-# 1. Проверка всех смонтированных путей
-log info "1. Checking mounted paths:"
-for path in "/addon_configs" "/ssl" "/config" "/data"; do
-    if [ -d "$path" ]; then
-        log info "   ✓ EXISTS: $path"
-        log info "     Permissions: $(ls -ld "$path")"
-        log info "     First 5 items: $(ls -la "$path" 2>/dev/null | head -6 | tail -5 | tr '\n' '; ' || echo "empty/cannot list")"
-    else
-        log info "   ✗ MISSING: $path"
-    fi
-done
-
-# 2. Проверка монтирования
-log info "2. Mount details:"
-mount | grep -E "(addon|config|ssl|data)" || log info "   No relevant mounts"
-
-# 3. Если /addon_configs существует, проверяем содержимое
-if [ -d "/addon_configs" ]; then
-    log info "3. /addon_configs contents:"
-    ls -la "/addon_configs/" 2>/dev/null | while read line; do
-        log info "   $line"
-    done || log error "   Cannot list /addon_configs"
+    local level="info"
+    local message="$*"
     
-    # Проверка существования NPM директории
-    NPM_PATH="/addon_configs/a0d7b954_nginxproxymanager"
-    if [ -d "$NPM_PATH" ]; then
-        log info "4. NPM directory found: $NPM_PATH"
-        log info "   Contents: $(find "$NPM_PATH" -maxdepth 2 -type d 2>/dev/null | head -10 | tr '\n' ' ' || echo "cannot list")"
-    else
-        log error "4. NPM directory NOT found: $NPM_PATH"
-        log info "   Available in /addon_configs:"
-        find "/addon_configs" -maxdepth 1 -type d 2>/dev/null | while read dir; do
-            log info "   - $dir"
-        done
-    fi
-else
-    log error "3. /addon_configs not available!"
+    # Определяем уровень логирования из первого аргумента
+    case "$1" in
+        error|warning|info|debug)
+            level="$1"
+            shift
+            message="$*"
+            ;;
+    esac
     
-    # Проверка через find
-    log info "4. Searching for addon_configs anywhere:"
-    find / -name "addon_configs" -type d 2>/dev/null | head -5 | while read dir; do
-        log info "   Found: $dir"
-    done
-fi
-
-# ==================== ОСНОВНАЯ КОНФИГУРАЦИЯ ====================
-log info "=== MAIN CONFIGURATION ==="
-
-# Получаем конфигурацию
-SRC_REL=$(bashio::config 'source_relative_path')
-DEST_REL=$(bashio::config 'dest_relative_path')
-INTERVAL=$(bashio::config 'interval_seconds')
-TZ=$(bashio::config 'timezone' 'UTC')
-
-export TZ
-log info "Configuration:"
-log info "  source_relative_path: $SRC_REL"
-log info "  dest_relative_path: $DEST_REL"
-log info "  interval_seconds: $INTERVAL"
-log info "  timezone: $TZ"
-
-# Пути
-SRC_ROOT="/addon_configs"
-DEST_ROOT="/ssl"
-SRC_DIR="${SRC_ROOT}/${SRC_REL}"
-DEST_DIR="${DEST_ROOT}/${DEST_REL}"
-
-log info "Full paths:"
-log info "  Source: $SRC_DIR"
-log info "  Destination: $DEST_DIR"
-
-# Проверка исходного пути
-log info "Checking source path..."
-if [ -d "${SRC_DIR}" ]; then
-    log info "✓ Source directory exists: $SRC_DIR"
-    log info "Contents:"
-    ls -la "${SRC_DIR}" 2>/dev/null || log error "Cannot list source directory"
+    # Получаем текущий уровень логирования из конфига
+    local config_level=$(bashio::config 'log_level' 'info')
     
-    # Проверка файлов сертификатов
-    for cert_file in "privkey.pem" "fullchain.pem"; do
-        if [ -f "${SRC_DIR}/${cert_file}" ]; then
-            size=$(stat -c%s "${SRC_DIR}/${cert_file}" 2>/dev/null || echo "unknown")
-            log info "✓ Certificate: $cert_file (size: ${size} bytes)"
-        else
-            log warning "✗ Missing: $cert_file"
+    # Определяем приоритеты уровней
+    local levels=("error" "warning" "info" "debug")
+    local config_priority=0
+    local message_priority=0
+    
+    for i in "${!levels[@]}"; do
+        if [ "${levels[$i]}" = "$config_level" ]; then
+            config_priority=$i
+        fi
+        if [ "${levels[$i]}" = "$level" ]; then
+            message_priority=$i
         fi
     done
-else
-    log error "✗ Source directory missing: $SRC_DIR"
     
-    # Детальный поиск
-    log info "Searching for certificate files in /addon_configs:"
-    find "/addon_configs" -name "privkey.pem" -o -name "fullchain.pem" 2>/dev/null | head -10 | while read file; do
-        log info "   Found: $file (in: $(dirname "$file"))"
+    # Логируем только если уровень сообщения >= уровня конфига
+    if [ $message_priority -le $config_priority ]; then
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$level] $message" >&2
+    fi
+}
+
+# Явные функции для каждого уровня (опционально, для удобства)
+log_error() { log error "$*"; }
+log_warning() { log warning "$*"; }
+log_info() { log info "$*"; }
+log_debug() { log debug "$*"; }
+
+clear_log() {
+    log_info "=== SSL Sync Starting ==="
+    log_info "Using Supervisor API method"
+    log_debug "Debug logging enabled"
+}
+
+clear_log
+
+# Получаем конфигурацию
+SRC_ADDON=$(bashio::config 'source_addon_slug')
+SRC_REL_PATH=$(bashio::config 'source_cert_path')
+DEST_REL=$(bashio::config 'dest_relative_path')
+ASTERISK_ADDON=$(bashio::config 'asterisk_addon_slug')
+INTERVAL=$(bashio::config 'interval_seconds')
+TZ=$(bashio::config 'timezone' 'UTC')
+RESTART_ASTERISK=$(bashio::config 'restart_asterisk')
+
+export TZ
+
+# Автоматически получаем Supervisor token
+SUPERVISOR_TOKEN=$(bashio::supervisor.token)
+
+if [ -z "$SUPERVISOR_TOKEN" ]; then
+    log_error "Cannot get Supervisor token. Check hassio_api permission in config.yaml"
+    exit 1
+fi
+
+DEST_DIR="/ssl/${DEST_REL}"
+mkdir -p "$DEST_DIR"
+
+log_info "Configuration:"
+log_info "  Source Addon: $SRC_ADDON"
+log_info "  Source Path: $SRC_REL_PATH"
+log_info "  Destination: $DEST_DIR"
+log_info "  Asterisk Addon: $ASTERISK_ADDON"
+log_info "  Interval: ${INTERVAL}s"
+log_info "  Restart Asterisk: $RESTART_ASTERISK"
+log_debug "Supervisor token obtained successfully"
+
+# ==================== ФУНКЦИЯ ПРОВЕРКИ ДОСТУПНОСТИ АДДОНОВ ====================
+
+check_addon_availability() {
+    local addon_slug="$1"
+    local addon_type="$2"
+    
+    log_info "Checking if $addon_type addon ($addon_slug) is available..."
+    
+    if curl -s -f -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" \
+        "http://supervisor/addons/${addon_slug}/info" >/dev/null 2>&1; then
+        log_info "✓ $addon_type addon ($addon_slug) is available"
+        return 0
+    else
+        log_error "✗ $addon_type addon ($addon_slug) not found or inaccessible"
+        return 1
+    fi
+}
+
+# ==================== ФУНКЦИЯ СИНХРОНИЗАЦИИ СЕРТИФИКАТОВ ====================
+
+sync_certificates() {
+    local changed=false
+    
+    # Проверяем доступность файлов перед копированием
+    log_debug "Checking certificate files availability..."
+    
+    for cert_file in "privkey.pem" "fullchain.pem"; do
+        if curl -s -f -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" \
+            "http://supervisor/addons/${SRC_ADDON}/files/${SRC_REL_PATH}/${cert_file}" >/dev/null 2>&1; then
+            log_debug "✓ $cert_file is available"
+        else
+            log_warning "✗ $cert_file not available in addon"
+            return 1
+        fi
     done
-fi
-
-log info "=== DIAGNOSTICS COMPLETE ==="
-
-# ==================== ОСНОВНАЯ ЛОГИКА ====================
-
-# Graceful shutdown
-cleanup() {
-    log info "Graceful stop received"
-    exit 0
+    
+    # Синхронизируем каждый файл
+    for cert_file in "privkey.pem" "fullchain.pem"; do
+        local src_url="http://supervisor/addons/${SRC_ADDON}/files/${SRC_REL_PATH}/${cert_file}"
+        local dest_file="${DEST_DIR}/${cert_file}"
+        local temp_file="${dest_file}.tmp"
+        
+        log_debug "Processing $cert_file from $src_url"
+        
+        # Скачиваем во временный файл
+        if curl -s -f -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" \
+            -o "$temp_file" "$src_url"; then
+            
+            # Проверяем размер файла
+            local file_size=$(stat -c%s "$temp_file" 2>/dev/null || echo 0)
+            log_debug "Downloaded $cert_file: $file_size bytes"
+            
+            if [ "$file_size" -lt 100 ]; then
+                log_warning "File $cert_file is too small ($file_size bytes), skipping"
+                rm -f "$temp_file"
+                continue
+            fi
+            
+            # Сравниваем с существующим файлом
+            if [ ! -f "$dest_file" ] || ! cmp -s "$temp_file" "$dest_file" 2>/dev/null; then
+                if mv -f "$temp_file" "$dest_file"; then
+                    log_info "✓ Updated $cert_file ($file_size bytes)"
+                    changed=true
+                else
+                    log_error "Failed to move $cert_file"
+                    rm -f "$temp_file"
+                fi
+            else
+                log_debug "No changes for $cert_file"
+                rm -f "$temp_file"
+            fi
+        else
+            log_error "Failed to download $cert_file"
+            rm -f "$temp_file"
+        fi
+    done
+    
+    echo "$changed"
 }
-trap cleanup TERM INT
 
-# Если исходный путь не существует, выходим с ошибкой
-if [ ! -d "${SRC_DIR}" ]; then
-    log error "FATAL: Source directory not found: ${SRC_DIR}"
-    log error "Cannot continue without source certificates"
+# ==================== ФУНКЦИЯ ПЕРЕЗАПУСКА ASTERISK ====================
+
+restart_asterisk() {
+    if [ "$RESTART_ASTERISK" = "true" ]; then
+        log_info "Attempting to restart Asterisk ($ASTERISK_ADDON)..."
+        
+        if curl -s -f -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" \
+            -X POST "http://supervisor/addons/${ASTERISK_ADDON}/restart" >/dev/null 2>&1; then
+            log_info "✓ Asterisk ($ASTERISK_ADDON) restart command sent successfully"
+        else
+            log_warning "⚠ Could not restart Asterisk ($ASTERISK_ADDON) - may be offline or not installed"
+        fi
+    fi
+}
+
+# ==================== ФУНКЦИЯ ПРОВЕРКИ СЕРТИФИКАТОВ ====================
+
+check_certificates() {
+    local valid=true
+    
+    for cert_file in "privkey.pem" "fullchain.pem"; do
+        local file="${DEST_DIR}/${cert_file}"
+        if [ -f "$file" ]; then
+            local size=$(stat -c%s "$file" 2>/dev/null || echo 0)
+            if [ "$size" -gt 100 ]; then
+                log_debug "✓ $cert_file: $size bytes"
+            else
+                log_warning "⚠ $cert_file is too small: $size bytes"
+                valid=false
+            fi
+        else
+            log_warning "⚠ $cert_file not found"
+            valid=false
+        fi
+    done
+    
+    [ "$valid" = "true" ]
+}
+
+# ==================== ОСНОВНОЙ ЦИКЛ ====================
+
+log_info "=== STARTING MAIN SYNC LOOP ==="
+
+# Проверяем доступность обоих аддонов
+if ! check_addon_availability "$SRC_ADDON" "NPM Source"; then
+    log_error "Source addon not available. Exiting."
     exit 1
 fi
 
-log info "Starting main sync loop: ${SRC_DIR} -> ${DEST_DIR} (interval: ${INTERVAL}s)"
+if ! check_addon_availability "$ASTERISK_ADDON" "Asterisk"; then
+    log_warning "Asterisk addon not available, continuing without restart capability"
+    RESTART_ASTERISK=false
+fi
 
-# Создаем целевую директорию
-mkdir -p "${DEST_DIR}" || {
-    log error "Cannot create destination directory ${DEST_DIR}"
-    exit 1
-}
-
-# Главный цикл синхронизации
 CYCLE_COUNT=0
 while true; do
     CYCLE_COUNT=$((CYCLE_COUNT + 1))
     
-    # Очистка журнала каждые 10 циклов (для предотвращения переполнения)
-    if [ $((CYCLE_COUNT % 10)) -eq 0 ]; then
+    # Периодическая очистка лога
+    if [ $((CYCLE_COUNT % 20)) -eq 0 ]; then
         clear_log
-        log info "Cycle ${CYCLE_COUNT} - periodic log cleanup"
+        log_info "Cycle $CYCLE_COUNT - log cleanup"
     fi
     
-    log info "=== Sync cycle ${CYCLE_COUNT} started (local: $(date)) ==="
-
-    # Проверяем что исходная директория всё ещё существует
-    if [ ! -d "${SRC_DIR}" ]; then
-        log error "Source directory disappeared: ${SRC_DIR}"
-        sleep 60
-        continue
-    fi
-
-    CHANGED=false
-    for f in privkey.pem fullchain.pem; do
-        SRC_FILE="${SRC_DIR}/${f}"
-        DEST_FILE="${DEST_DIR}/${f}"
-
-        if [ -f "${SRC_FILE}" ]; then
-            SRC_SIZE=$(stat -c%s "${SRC_FILE}" 2>/dev/null || echo "0")
-            if [ "$SRC_SIZE" -eq 0 ]; then
-                log warning "Source file is empty: ${f}"
-                continue
-            fi
-
-            # Проверяем, нужно ли копировать
-            if [ ! -f "${DEST_FILE}" ] || ! cmp -s "${SRC_FILE}" "${DEST_FILE}" 2>/dev/null; then
-                log info "Copying ${f} (size: ${SRC_SIZE} bytes)..."
-                if cp -f "${SRC_FILE}" "${DEST_FILE}"; then
-                    COPIED_SIZE=$(stat -c%s "${DEST_FILE}" 2>/dev/null || echo "0")
-                    log info "✓ Successfully copied ${f} (source: ${SRC_SIZE} bytes, dest: ${COPIED_SIZE} bytes)"
-                    CHANGED=true
-                else
-                    log error "✗ Failed to copy ${f}"
-                fi
+    log_debug "=== Sync cycle $CYCLE_COUNT started ==="
+    
+    # Выполняем синхронизацию
+    if CHANGED=$(sync_certificates); then
+        if [ "$CHANGED" = "true" ]; then
+            log_info "✓ Certificate changes detected and applied"
+            
+            # Проверяем что сертификаты валидны
+            if check_certificates; then
+                # Перезапускаем Asterisk если нужно и доступен
+                restart_asterisk
             else
-                log debug "No changes for ${f}"
+                log_warning "New certificates appear invalid, skipping Asterisk restart"
             fi
         else
-            log warning "Source file missing: ${f}"
-        fi
-    done
-
-    if [ "${CHANGED}" = true ]; then
-        log info "✓ Changes detected in certificate files"
-        
-        # Перезапуск Asterisk
-        TOKEN=$(bashio::supervisor_token 2>/dev/null || echo "")
-        if [ -n "$TOKEN" ]; then
-            log info "Attempting to restart Asterisk..."
-            if curl -s -f -H "Authorization: Bearer ${TOKEN}" \
-               -X POST "http://supervisor/addons/b35499aa_asterisk/restart" >/dev/null 2>&1; then
-                log info "✓ Asterisk restart command sent successfully"
-            else
-                log warning "⚠ Could not restart Asterisk"
-            fi
-        else
-            log info "ℹ Supervisor token not available"
+            log_debug "No certificate changes detected in cycle $CYCLE_COUNT"
         fi
     else
-        log info "No changes detected in this cycle"
+        log_error "✗ Sync cycle failed"
     fi
-
-    log info "Sync cycle ${CYCLE_COUNT} completed. Sleeping for ${INTERVAL}s..."
+    
+    log_debug "Sync cycle $CYCLE_COUNT completed. Sleeping for ${INTERVAL}s..."
     sleep "${INTERVAL}"
 done
