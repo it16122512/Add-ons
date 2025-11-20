@@ -24,9 +24,9 @@ map:
 #  - config:ro
   - ssl:rw
 #  - share:ro
-#  - addon_config:ro
-#  - addon_configs:ro
-  - all_addon_configs:ro
+  - addon_config:ro
+  - addon_configs:ro
+#  - all_addon_configs:ro
   
 options:
   source_relative_path: "a0d7b954_nginxproxymanager/letsencrypt/live/npm-8"
