@@ -1,6 +1,6 @@
 name: File Sync SSL
 slug: file_sync
-version: "2.2.1"
+version: "2.2.2"
 description: "Sync SSL certificates from Nginx Proxy Manager to Asterisk"
 url: https://github.com/it16122512/Add-ons/file_sync
 arch:
@@ -11,8 +11,8 @@ build_from:
   aarch64: "ghcr.io/home-assistant/aarch64-base:3.2.7"
   amd64: "ghcr.io/home-assistant/amd64-base:3.2.7"
   armv7: "ghcr.io/home-assistant/armv7-base:3.2.7"
-startup: services
-boot: auto
+startup: once  # ← ИЗМЕНЕНИЕ: было 'services', теперь 'once'
+boot: manual   # ← ИЗМЕНЕНИЕ: было 'auto', теперь 'manual'
 init: false
 hassio_api: true
 host_network: false
@@ -28,7 +28,6 @@ map:
   - addon_config:ro
   - addon_configs:ro
   - all_addon_configs:ro
-  
 
 options:
   source_relative_path: "a0d7b954_nginxproxymanager/letsencrypt/live/npm-8"
@@ -43,4 +42,3 @@ schema:
   interval_seconds: int(60,3600)
   log_level: list(info|debug|warning|error)
   timezone: str
-  
