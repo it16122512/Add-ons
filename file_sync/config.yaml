@@ -1,6 +1,6 @@
 name: File Sync SSL
 slug: file_sync
-version: "2.0.2"
+version: "2.0.3"
 description: "Sync SSL certificates using Supervisor API"
 url: https://github.com/it16122512/Add-ons/file_sync
 arch:
@@ -25,7 +25,7 @@ options:
   source_cert_path: "letsencrypt/live/npm-8"
   dest_relative_path: "nginxproxymanager/live/npm-1"
   asterisk_addon_slug: "b35499aa_asterisk"
-  supervisor_token: ""  # ← Добавлен токен (опционально)
+  
   interval_seconds: 300
   timezone: "Europe/Moscow"
   restart_asterisk: true
