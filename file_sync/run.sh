@@ -1,11 +1,12 @@
 #!/usr/bin/with-contenv bashio
 set -e
 
-# ==================== ЛОГИРОВАНИЕ ====================
+# Логирование с поддержкой уровней
 log() {
     local level="info"
     local message="$*"
     
+    # Определяем уровень логирования из первого аргумента
     case "$1" in
         error|warning|info|debug)
             level="$1"
@@ -14,7 +15,10 @@ log() {
             ;;
     esac
     
+    # Получаем текущий уровень логирования из конфига
     local config_level=$(bashio::config 'log_level' 'info')
+    
+    # Определяем приоритеты уровней
     local levels=("error" "warning" "info" "debug")
     local config_priority=0
     local message_priority=0
@@ -28,11 +32,13 @@ log() {
         fi
     done
     
+    # Логируем только если уровень сообщения >= уровня конфига
     if [ $message_priority -le $config_priority ]; then
         echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$level] $message" >&2
     fi
 }
 
+# Явные функции для каждого уровня
 log_error() { log error "$*"; }
 log_warning() { log warning "$*"; }
 log_info() { log info "$*"; }
@@ -46,17 +52,40 @@ clear_log() {
 
 clear_log
 
-# ==================== ЗАГРУЗКА КОНФИГА ====================
+# Получаем конфигурацию
 SRC_ADDON=$(bashio::config 'source_addon_slug')
 SRC_REL_PATH=$(bashio::config 'source_cert_path')
 DEST_REL=$(bashio::config 'dest_relative_path')
 ASTERISK_ADDON=$(bashio::config 'asterisk_addon_slug')
-MANUAL_TOKEN=$(bashio::config 'supervisor_token')
 INTERVAL=$(bashio::config 'interval_seconds')
 TZ=$(bashio::config 'timezone' 'UTC')
 RESTART_ASTERISK=$(bashio::config 'restart_asterisk')
 
 export TZ
+
+# ==================== ПОЛУЧЕНИЕ SUPERVISOR TOKEN ====================
+
+SUPERVISOR_TOKEN=""
+
+# Используем только автоматический токен от Supervisor
+if bashio::var.has_value "$(bashio::supervisor.token)"; then
+    SUPERVISOR_TOKEN=$(bashio::supervisor.token)
+    log_info "Using automatically obtained Supervisor token"
+    log_debug "Token obtained successfully via bashio::supervisor.token"
+else
+    log_error "Cannot obtain Supervisor token automatically"
+    log_error "Ensure 'hassio_api: true' is set in config.yaml"
+    log_error "Check if addon has proper Supervisor API permissions"
+    exit 1
+fi
+
+# Проверяем что токен не пустой
+if [ -z "$SUPERVISOR_TOKEN" ]; then
+    log_error "Supervisor token is empty"
+    exit 1
+fi
+
+log_debug "Supervisor token obtained successfully (starts with: ${SUPERVISOR_TOKEN:0:10}...)"
 
 DEST_DIR="/ssl/${DEST_REL}"
 mkdir -p "$DEST_DIR"
@@ -68,80 +97,10 @@ log_info "  Destination: $DEST_DIR"
 log_info "  Asterisk Addon: $ASTERISK_ADDON"
 log_info "  Interval: ${INTERVAL}s"
 log_info "  Restart Asterisk: $RESTART_ASTERISK"
+log_info "  Token Source: auto"
 
-# ==================== ПОЛУЧЕНИЕ SUPERVISOR TOKEN ====================
-SUPERVISOR_TOKEN=""
+# ==================== ФУНКЦИЯ ПРОВЕРКИ ДОСТУПНОСТИ АДДОНОВ ====================
 
-if [ -n "$MANUAL_TOKEN" ]; then
-    SUPERVISOR_TOKEN="$MANUAL_TOKEN"
-    log_info "Using manually configured Supervisor token"
-    log_debug "Token length: ${#MANUAL_TOKEN} characters"
-elif bashio::var.has_value "$(bashio::supervisor.token)"; then
-    SUPERVISOR_TOKEN=$(bashio::supervisor.token)
-    log_info "Using automatically obtained Supervisor token"
-elif [ -n "${SUPERVISOR_TOKEN:-}" ]; then
-    SUPERVISOR_TOKEN="${SUPERVISOR_TOKEN}"
-    log_info "Using Supervisor token from environment variable"
-else
-    log_error "Cannot obtain Supervisor token. Available options:"
-    log_error "1. Set 'supervisor_token' in addon configuration"
-    log_error "2. Ensure 'hassio_api: true' is set in config.yaml"
-    log_error "3. Check if Supervisor is accessible"
-    exit 1
-fi
-
-if [ -z "$SUPERVISOR_TOKEN" ]; then
-    log_error "Supervisor token is empty"
-    exit 1
-fi
-
-log_debug "Supervisor token obtained successfully (starts with: ${SUPERVISOR_TOKEN:0:10}...)"
-
-# ==================== ФУНКЦИЯ ДЛЯ ПОДРОБНОЙ ДИАГНОСТИКИ ТОКЕНА ====================
-debug_token_validation() {
-    log_debug "=== TOKEN DEBUG INFO ==="
-    log_debug "Token preview: ${SUPERVISOR_TOKEN:0:20}..."
-    log_debug "Token length: ${#SUPERVISOR_TOKEN}"
-    
-    local endpoints=("info" "addons" "core/info" "host/info")
-    
-    for endpoint in "${endpoints[@]}"; do
-        log_debug "Testing endpoint: /${endpoint}"
-        local response=$(curl -s -w "%{http_code}" -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" \
-            "http://supervisor/${endpoint}" 2>/dev/null || echo "CURL_ERROR")
-        
-        if [[ "$response" =~ ^2[0-9][0-9]$ ]]; then
-            log_debug "✓ Endpoint /${endpoint}: HTTP $response"
-        else
-            log_debug "✗ Endpoint /${endpoint}: $response"
-        fi
-    done
-    log_debug "=== END TOKEN DEBUG ==="
-}
-
-# ==================== ФУНКЦИЯ ПРОВЕРКИ ТОКЕНА ====================
-validate_token() {
-    log_debug "Validating Supervisor token..."
-    
-    if curl -s -f -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" \
-        "http://supervisor/info" >/dev/null 2>&1; then
-        log_debug "✓ Supervisor token is valid"
-        return 0
-    else
-        log_error "✗ Supervisor token is invalid or expired"
-        return 1
-    fi
-}
-
-# ==================== ВЫЗОВ DEBUG ПЕРЕД ПРОВЕРКОЙ ====================
-debug_token_validation
-
-if ! validate_token; then
-    log_error "Supervisor token validation failed. Exiting."
-    exit 1
-fi
-
-# ==================== ФУНКЦИИ ПРОВЕРКИ ДОСТУПНОСТИ ADDON ====================
 check_addon_availability() {
     local addon_slug="$1"
     local addon_type="$2"
@@ -158,9 +117,32 @@ check_addon_availability() {
     fi
 }
 
-# ==================== ФУНКЦИЯ СИНХРОНИЗАЦИИ ====================
+# ==================== ФУНКЦИЯ ПРОВЕРКИ ТОКЕНА ====================
+
+validate_token() {
+    log_debug "Validating Supervisor token..."
+    
+    # Пробуем разные эндпоинты для проверки
+    local endpoints=("info" "addons" "core/info" "host/info")
+    
+    for endpoint in "${endpoints[@]}"; do
+        if curl -s -f -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" \
+            "http://supervisor/${endpoint}" >/dev/null 2>&1; then
+            log_debug "✓ Supervisor token validated via /${endpoint}"
+            return 0
+        fi
+    done
+    
+    log_error "✗ Supervisor token validation failed on all endpoints"
+    return 1
+}
+
+# ==================== ФУНКЦИЯ СИНХРОНИЗАЦИИ СЕРТИФИКАТОВ ====================
+
 sync_certificates() {
     local changed=false
+    
+    # Проверяем доступность файлов перед копированием
     log_debug "Checking certificate files availability..."
     
     for cert_file in "privkey.pem" "fullchain.pem"; do
@@ -173,6 +155,7 @@ sync_certificates() {
         fi
     done
     
+    # Синхронизируем каждый файл
     for cert_file in "privkey.pem" "fullchain.pem"; do
         local src_url="http://supervisor/addons/${SRC_ADDON}/files/${SRC_REL_PATH}/${cert_file}"
         local dest_file="${DEST_DIR}/${cert_file}"
@@ -180,7 +163,11 @@ sync_certificates() {
         
         log_debug "Processing $cert_file from $src_url"
         
-        if curl -s -f -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" -o "$temp_file" "$src_url"; then
+        # Скачиваем во временный файл
+        if curl -s -f -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" \
+            -o "$temp_file" "$src_url"; then
+            
+            # Проверяем размер файла
             local file_size=$(stat -c%s "$temp_file" 2>/dev/null || echo 0)
             log_debug "Downloaded $cert_file: $file_size bytes"
             
@@ -190,6 +177,7 @@ sync_certificates() {
                 continue
             fi
             
+            # Сравниваем с существующим файлом
             if [ ! -f "$dest_file" ] || ! cmp -s "$temp_file" "$dest_file" 2>/dev/null; then
                 if mv -f "$temp_file" "$dest_file"; then
                     log_info "✓ Updated $cert_file ($file_size bytes)"
@@ -212,6 +200,7 @@ sync_certificates() {
 }
 
 # ==================== ФУНКЦИЯ ПЕРЕЗАПУСКА ASTERISK ====================
+
 restart_asterisk() {
     if [ "$RESTART_ASTERISK" = "true" ]; then
         log_info "Attempting to restart Asterisk ($ASTERISK_ADDON)..."
@@ -226,6 +215,7 @@ restart_asterisk() {
 }
 
 # ==================== ФУНКЦИЯ ПРОВЕРКИ СЕРТИФИКАТОВ ====================
+
 check_certificates() {
     local valid=true
     
@@ -249,8 +239,16 @@ check_certificates() {
 }
 
 # ==================== ОСНОВНОЙ ЦИКЛ ====================
+
 log_info "=== STARTING MAIN SYNC LOOP ==="
 
+# Проверяем валидность токена
+if ! validate_token; then
+    log_error "Supervisor token validation failed. Exiting."
+    exit 1
+fi
+
+# Проверяем доступность обоих аддонов
 if ! check_addon_availability "$SRC_ADDON" "NPM Source"; then
     log_error "Source addon not available. Exiting."
     exit 1
@@ -265,6 +263,7 @@ CYCLE_COUNT=0
 while true; do
     CYCLE_COUNT=$((CYCLE_COUNT + 1))
     
+    # Периодическая очистка лога
     if [ $((CYCLE_COUNT % 20)) -eq 0 ]; then
         clear_log
         log_info "Cycle $CYCLE_COUNT - log cleanup"
@@ -272,10 +271,14 @@ while true; do
     
     log_debug "=== Sync cycle $CYCLE_COUNT started ==="
     
+    # Выполняем синхронизацию
     if CHANGED=$(sync_certificates); then
         if [ "$CHANGED" = "true" ]; then
             log_info "✓ Certificate changes detected and applied"
+            
+            # Проверяем что сертификаты валидны
             if check_certificates; then
+                # Перезапускаем Asterisk если нужно и доступен
                 restart_asterisk
             else
                 log_warning "New certificates appear invalid, skipping Asterisk restart"
@@ -290,4 +293,3 @@ while true; do
     log_debug "Sync cycle $CYCLE_COUNT completed. Sleeping for ${INTERVAL}s..."
     sleep "${INTERVAL}"
 done
-
