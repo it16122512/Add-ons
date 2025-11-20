@@ -1,7 +1,7 @@
 name: File Sync SSL
 slug: file_sync
-version: "1.7.5"
-description: "Sync SSL certificates from Nginx Proxy Manager to Asterisk"
+version: "2.0.0"
+description: "Sync SSL certificates using Supervisor API"
 url: https://github.com/it16122512/Add-ons/file_sync
 arch:
   - aarch64
@@ -18,19 +18,24 @@ hassio_api: true
 host_network: false
 
 map:
-  - addon_configs:ro    # ← Конфиги NPM
-  - ssl:rw              # ← SSL для Asterisk
+  - ssl:rw
 
 options:
-  source_relative_path: "a0d7b954_nginxproxymanager/letsencrypt/live/npm-8"
+  source_addon_slug: "a0d7b954_nginxproxymanager"
+  source_cert_path: "letsencrypt/live/npm-8"
   dest_relative_path: "nginxproxymanager/live/npm-1"
+  asterisk_addon_slug: "b35499aa_asterisk"
   interval_seconds: 300
-  log_level: info
-  timezone: "Europe/Moscow"  # ← ДОБАВИТЬ
+  timezone: "Europe/Moscow"
+  restart_asterisk: true
+  log_level: "info"  # ← Добавлен уровень логирования
+
 schema:
-  source_relative_path: str
+  source_addon_slug: str
+  source_cert_path: str
   dest_relative_path: str
+  asterisk_addon_slug: str
   interval_seconds: int(60,3600)
-  log_level: list(info|debug|warning|error)  # ← ИСПРАВИТЬ здесь!
-  timezone: str  # ← ДОБАВИТЬ
-  
+  timezone: str
+  restart_asterisk: bool
+  log_level: list(error|warning|info|debug)  # ← Добавлен в schema
