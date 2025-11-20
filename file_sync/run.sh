@@ -8,7 +8,7 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$level] $*" >&2
 }
 
-log info "SSL Sync v1.6.8 starting with DEBUG..."
+log info "SSL Sync starting with DEBUG..."
 
 # ==================== ДЕТАЛЬНАЯ ДИАГНОСТИКА ====================
 log info "=== STARTING COMPREHENSIVE DIAGNOSTICS ==="
