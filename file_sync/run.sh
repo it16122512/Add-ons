@@ -10,23 +10,6 @@ log() {
 
 log info "SSL Sync starting..."
 
-# ==================== ДИАГНОСТИКА СРЕДЫ ====================
-log info "=== ENVIRONMENT DIAGNOSTICS ==="
-
-# Проверка всех смонтированных путей
-log info "Checking mounted paths:"
-for path in "/config" "/ssl" "/share" "/addon_config" "/backup" "/data" "/addon_configs"; do
-    if [ -d "$path" ]; then
-        log info "✓ EXISTS: $path"
-        # Показываем что внутри
-        find "$path" -maxdepth 1 -type d 2>/dev/null | head -5 | while read dir; do
-            log info "   - $dir"
-        done
-    else
-        log info "✗ MISSING: $path"
-    fi
-done
-
 # ==================== КОНФИГУРАЦИЯ ====================
 log info "=== CONFIGURATION ==="
 
@@ -50,7 +33,7 @@ log info "=== SEARCHING FOR NPM CERTIFICATES ==="
 find_npm_certificates() {
     local rel_path="$1"
     local possible_roots=(
-        "/addon_configs"  # ← ОСНОВНОЙ ПУТЬ который найден в логах!
+        "/addon_configs"
         "/addon_config"
         "/config" 
         "/share"
@@ -121,77 +104,59 @@ mkdir -p "$DEST_DIR" || {
     exit 1
 }
 
-# ==================== ОДИН ЦИКЛ СИНХРОНИЗАЦИИ ====================
-log info "=== STARTING SINGLE SYNC CYCLE ==="
+# ==================== ОСНОВНОЙ ЦИКЛ С БОЛЬШИМ ИНТЕРВАЛОМ ====================
+log info "=== STARTING MAIN SYNC LOOP (3 MONTH INTERVAL) ==="
 
-CHANGED=false
-for cert_file in privkey.pem fullchain.pem; do
-    SRC_FILE="$SRC_DIR/$cert_file"
-    DEST_FILE="$DEST_DIR/$cert_file"
+CYCLE_COUNT=0
+while true; do
+    CYCLE_COUNT=$((CYCLE_COUNT + 1))
+    
+    log info "=== Sync cycle $CYCLE_COUNT started ==="
 
-    if [ -f "$SRC_FILE" ]; then
-        if [ ! -f "$DEST_FILE" ] || ! cmp -s "$SRC_FILE" "$DEST_FILE"; then
-            log info "Updating $cert_file..."
-            if cp -f "$SRC_FILE" "$DEST_FILE"; then
-                COPIED_SIZE=$(stat -c%s "$DEST_FILE" 2>/dev/null || echo "unknown")
-                log info "✓ Successfully updated $cert_file (${COPIED_SIZE} bytes)"
-                CHANGED=true
+    CHANGED=false
+    for cert_file in privkey.pem fullchain.pem; do
+        SRC_FILE="$SRC_DIR/$cert_file"
+        DEST_FILE="$DEST_DIR/$cert_file"
+
+        if [ -f "$SRC_FILE" ]; then
+            if [ ! -f "$DEST_FILE" ] || ! cmp -s "$SRC_FILE" "$DEST_FILE"; then
+                log info "Updating $cert_file..."
+                if cp -f "$SRC_FILE" "$DEST_FILE"; then
+                    COPIED_SIZE=$(stat -c%s "$DEST_FILE" 2>/dev/null || echo "unknown")
+                    log info "✓ Successfully updated $cert_file (${COPIED_SIZE} bytes)"
+                    CHANGED=true
+                else
+                    log error "❌ Failed to copy $cert_file"
+                fi
             else
-                log error "❌ Failed to copy $cert_file"
+                log info "No changes for $cert_file"
             fi
         else
-            log info "No changes for $cert_file"
+            log error "Source file missing: $cert_file"
+        fi
+    done
+
+    if [ "$CHANGED" = true ]; then
+        log info "✓ Certificate changes detected - restarting Asterisk"
+        
+        # Перезапуск Asterisk через Supervisor API
+        TOKEN=$(bashio::supervisor.token 2>/dev/null || echo "")
+        if [ -n "$TOKEN" ]; then
+            log info "Sending restart command to Asterisk addon: $ASTERISK_SLUG"
+            if curl -s -f -H "Authorization: Bearer $TOKEN" \
+               -X POST "http://supervisor/addons/${ASTERISK_SLUG}/restart" >/dev/null; then
+                log info "✓ Asterisk restart command sent successfully"
+            else
+                log warning "⚠ Could not restart Asterisk (addon might not exist or be unavailable)"
+            fi
+        else
+            log info "ℹ Supervisor token not available"
         fi
     else
-        log error "Source file missing: $cert_file"
+        log info "No certificate changes detected"
     fi
+
+    # ОЧЕНЬ БОЛЬШОЙ ИНТЕРВАЛ - 3 МЕСЯЦА (примерно 7,776,000 секунд)
+    log info "Cycle $CYCLE_COUNT completed. Sleeping for 3 months..."
+    sleep 7776000
 done
-
-if [ "$CHANGED" = true ]; then
-    log info "✓ Certificate changes detected - restarting Asterisk"
-    
-    # Перезапуск Asterisk через Supervisor API
-    TOKEN=$(bashio::supervisor.token 2>/dev/null || echo "")
-    if [ -n "$TOKEN" ]; then
-        log info "Sending restart command to Asterisk addon: $ASTERISK_SLUG"
-        if curl -s -f -H "Authorization: Bearer $TOKEN" \
-           -X POST "http://supervisor/addons/${ASTERISK_SLUG}/restart" >/dev/null; then
-            log info "✓ Asterisk restart command sent successfully"
-        else
-            log warning "⚠ Could not restart Asterisk (addon might not exist or be unavailable)"
-        fi
-    else
-        log info "ℹ Supervisor token not available"
-    fi
-else
-    log info "No certificate changes detected"
-fi
-
-log info "=== SSL SYNC COMPLETED SUCCESSFULLY ==="
-
-# ==================== ЯВНАЯ ОСТАНОВКА АДОНА ====================
-log info "Stopping this addon via Supervisor API..."
-
-TOKEN=$(bashio::supervisor.token 2>/dev/null || echo "")
-if [ -n "$TOKEN" ]; then
-    # Получаем собственный slug адона
-    SELF_SLUG=$(bashio::addon.slug 2>/dev/null || echo "")
-    
-    if [ -n "$SELF_SLUG" ]; then
-        log info "Sending stop command for addon: $SELF_SLUG"
-        if curl -s -f -H "Authorization: Bearer $TOKEN" \
-           -X POST "http://supervisor/addons/${SELF_SLUG}/stop" >/dev/null; then
-            log info "✓ Stop command sent successfully"
-        else
-            log warning "⚠ Could not send stop command via API"
-        fi
-    else
-        log info "ℹ Could not determine own addon slug"
-    fi
-else
-    log info "ℹ Supervisor token not available for stop command"
-fi
-
-# Дополнительно: завершаем процесс с ненулевым кодом, чтобы предотвратить перезапуск
-log info "Addon completed. Exiting with code 1 to prevent auto-restart."
-exit 1
