@@ -1,7 +1,6 @@
-# file_sync/config.yaml
 name: File Sync SSL
 slug: file_sync
-version: "2.1.3"
+version: "2.1.5"
 description: "Sync SSL certificates from Nginx Proxy Manager to Asterisk"
 url: https://github.com/it16122512/Add-ons/file_sync
 arch:
@@ -20,21 +19,27 @@ host_network: false
 privileged:
   - SYS_ADMIN
   - DAC_READ_SEARCH
+
+# КЛЮЧЕВОЕ ИЗМЕНЕНИЕ - даем полный доступ как Filebrowser
 map:
-  - all_addon_configs:ro
-  - addon_config:ro    # ← Конфиги NPM
-  - ssl:rw              # ← SSL для Asterisk
+  - config:rw
+  - ssl:rw
+  - share:rw
+  - addon_config:rw
+  - all_addon_configs:rw
+  - backup:rw
 
 options:
   source_relative_path: "a0d7b954_nginxproxymanager/letsencrypt/live/npm-8"
   dest_relative_path: "nginxproxymanager/live/npm-1"
   interval_seconds: 300
   log_level: info
-  timezone: "Europe/Moscow"  # ← ДОБАВИТЬ
+  timezone: "Europe/Moscow"
+
 schema:
   source_relative_path: str
   dest_relative_path: str
   interval_seconds: int(60,3600)
-  log_level: list(info|debug|warning|error)  # ← ИСПРАВИТЬ здесь!
-  timezone: str  # ← ДОБАВИТЬ
-
+  log_level: list(info|debug|warning|error)
+  timezone: str
+  
