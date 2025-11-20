@@ -1,6 +1,6 @@
 name: File Sync SSL
 slug: file_sync
-version: "2.0.3"
+version: "2.0.4"
 description: "Sync SSL certificates using Supervisor API"
 url: https://github.com/it16122512/Add-ons/file_sync
 arch:
