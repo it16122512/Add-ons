@@ -28,7 +28,7 @@ cleanup() {
 trap cleanup TERM INT
 
 # Конфигурация путей
-SRC_ROOT="/addon_config"
+SRC_ROOT="${ADDON_CONFIG:-/addon_config}"   # <-- используем переменную HAOS
 DEST_ROOT="/ssl"
 SRC_DIR="${SRC_ROOT}/${SRC_REL}"
 DEST_DIR="${DEST_ROOT}/${DEST_REL}"
@@ -88,7 +88,6 @@ while true; do
 
     if [ "${CHANGED}" = true ]; then
         log info "Changes detected, consider notifying or restarting services here..."
-        # если нужен curl для supervisor API, можно добавить здесь
     fi
 
     log info "Cycle completed. Sleeping for ${INTERVAL}s..."
