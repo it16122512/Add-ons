@@ -1,7 +1,7 @@
 # file_sync/config.yaml
 name: File Sync SSL
 slug: file_sync
-version: "2.1.1"
+version: "2.1.2"
 description: "Sync SSL certificates from Nginx Proxy Manager to Asterisk"
 url: https://github.com/it16122512/Add-ons/file_sync
 arch:
