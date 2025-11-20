@@ -67,15 +67,24 @@ export TZ
 
 SUPERVISOR_TOKEN=""
 
-# Используем только автоматический токен от Supervisor
-if bashio::var.has_value "$(bashio::supervisor.token)"; then
+# Метод 1: Пытаемся получить токен из переменной окружения
+if [ -n "${SUPERVISOR_TOKEN:-}" ]; then
+    SUPERVISOR_TOKEN="${SUPERVISOR_TOKEN}"
+    log_info "Using Supervisor token from environment variable"
+    log_debug "Token from SUPERVISOR_TOKEN environment variable"
+
+# Метод 2: Пытаемся использовать bashio (если доступен)
+elif command -v bashio::supervisor.token >/dev/null 2>&1 && bashio::var.has_value "$(bashio::supervisor.token)"; then
     SUPERVISOR_TOKEN=$(bashio::supervisor.token)
-    log_info "Using automatically obtained Supervisor token"
-    log_debug "Token obtained successfully via bashio::supervisor.token"
+    log_info "Using Supervisor token from bashio"
+    log_debug "Token from bashio::supervisor.token"
+
 else
-    log_error "Cannot obtain Supervisor token automatically"
-    log_error "Ensure 'hassio_api: true' is set in config.yaml"
-    log_error "Check if addon has proper Supervisor API permissions"
+    log_error "Cannot obtain Supervisor token"
+    log_error "Available methods:"
+    log_error "1. SUPERVISOR_TOKEN environment variable: ${SUPERVISOR_TOKEN:+SET}"
+    log_error "2. bashio::supervisor.token: $(command -v bashio::supervisor.token >/dev/null 2>&1 && echo 'AVAILABLE' || echo 'NOT_AVAILABLE')"
+    log_error "3. Manual token in configuration"
     exit 1
 fi
 
@@ -97,7 +106,7 @@ log_info "  Destination: $DEST_DIR"
 log_info "  Asterisk Addon: $ASTERISK_ADDON"
 log_info "  Interval: ${INTERVAL}s"
 log_info "  Restart Asterisk: $RESTART_ASTERISK"
-log_info "  Token Source: auto"
+log_info "  Token Source: $([ -n "${SUPERVISOR_TOKEN:-}" ] && echo "environment" || echo "bashio")"
 
 # ==================== ФУНКЦИЯ ПРОВЕРКИ ДОСТУПНОСТИ АДДОНОВ ====================
 
