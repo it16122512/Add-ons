@@ -24,14 +24,12 @@ log info "=== CONFIGURATION ==="
 # Получаем конфигурацию
 SRC_REL=$(bashio::config 'source_relative_path')
 DEST_REL=$(bashio::config 'dest_relative_path')
-ASTERISK_SLUG=$(bashio::config 'asterisk_addon_slug')
 TZ=$(bashio::config 'timezone' 'UTC')
 
 export TZ
 log info "Configuration:"
 log info "  source_relative_path: $SRC_REL"
 log info "  dest_relative_path: $DEST_REL"
-log info "  asterisk_addon_slug: $ASTERISK_SLUG"
 log info "  timezone: $TZ"
 
 # ==================== ПОИСК NPM СЕРТИФИКАТОВ ====================
@@ -145,21 +143,8 @@ while true; do
     done
 
     if [ "$CHANGED" = true ]; then
-        log warning "⚠ Certificate changes detected - restarting Asterisk"
-        
-        # Перезапуск Asterisk через Supervisor API
-        TOKEN=$(bashio::supervisor.token 2>/dev/null || echo "")
-        if [ -n "$TOKEN" ]; then
-            log info "Sending restart command to Asterisk addon: $ASTERISK_SLUG"
-            if curl -s -f -H "Authorization: Bearer $TOKEN" \
-               -X POST "http://supervisor/addons/${ASTERISK_SLUG}/restart" >/dev/null; then
-                log info "✓ Asterisk restart command sent successfully"
-            else
-                log error "❌ CRITICAL: Could not restart Asterisk - certificates updated but Asterisk may be using old ones!"
-            fi
-        else
-            log error "❌ CRITICAL: Supervisor token not available - cannot restart Asterisk after certificate update!"
-        fi
+        log warning "⚠ Certificate changes detected - manual Asterisk restart required"
+        log info "Please restart Asterisk addon manually to apply new SSL certificates"
     else
         log info "No certificate changes detected"
     fi
