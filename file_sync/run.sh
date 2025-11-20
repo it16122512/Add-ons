@@ -38,7 +38,7 @@ log() {
     fi
 }
 
-# Явные функции для каждого уровня (опционально, для удобства)
+# Явные функции для каждого уровня
 log_error() { log error "$*"; }
 log_warning() { log warning "$*"; }
 log_info() { log info "$*"; }
@@ -57,19 +57,48 @@ SRC_ADDON=$(bashio::config 'source_addon_slug')
 SRC_REL_PATH=$(bashio::config 'source_cert_path')
 DEST_REL=$(bashio::config 'dest_relative_path')
 ASTERISK_ADDON=$(bashio::config 'asterisk_addon_slug')
+MANUAL_TOKEN=$(bashio::config 'supervisor_token')  # ← Ручной токен
 INTERVAL=$(bashio::config 'interval_seconds')
 TZ=$(bashio::config 'timezone' 'UTC')
 RESTART_ASTERISK=$(bashio::config 'restart_asterisk')
 
 export TZ
 
-# Автоматически получаем Supervisor token
-SUPERVISOR_TOKEN=$(bashio::supervisor.token)
+# ==================== ПОЛУЧЕНИЕ SUPERVISOR TOKEN ====================
 
-if [ -z "$SUPERVISOR_TOKEN" ]; then
-    log_error "Cannot get Supervisor token. Check hassio_api permission in config.yaml"
+SUPERVISOR_TOKEN=""
+
+# Приоритет 1: Используем ручной токен из конфига
+if [ -n "$MANUAL_TOKEN" ]; then
+    SUPERVISOR_TOKEN="$MANUAL_TOKEN"
+    log_info "Using manually configured Supervisor token"
+    log_debug "Token length: ${#MANUAL_TOKEN} characters"
+    
+# Приоритет 2: Пытаемся получить токен автоматически
+elif bashio::var.has_value "$(bashio::supervisor.token)"; then
+    SUPERVISOR_TOKEN=$(bashio::supervisor.token)
+    log_info "Using automatically obtained Supervisor token"
+    
+# Приоритет 3: Пытаемся получить из переменной окружения
+elif [ -n "${SUPERVISOR_TOKEN:-}" ]; then
+    SUPERVISOR_TOKEN="${SUPERVISOR_TOKEN}"
+    log_info "Using Supervisor token from environment variable"
+    
+else
+    log_error "Cannot obtain Supervisor token. Available options:"
+    log_error "1. Set 'supervisor_token' in addon configuration"
+    log_error "2. Ensure 'hassio_api: true' is set in config.yaml"
+    log_error "3. Check if Supervisor is accessible"
     exit 1
 fi
+
+# Проверяем что токен не пустой
+if [ -z "$SUPERVISOR_TOKEN" ]; then
+    log_error "Supervisor token is empty"
+    exit 1
+fi
+
+log_debug "Supervisor token obtained successfully (starts with: ${SUPERVISOR_TOKEN:0:10}...)"
 
 DEST_DIR="/ssl/${DEST_REL}"
 mkdir -p "$DEST_DIR"
@@ -81,7 +110,7 @@ log_info "  Destination: $DEST_DIR"
 log_info "  Asterisk Addon: $ASTERISK_ADDON"
 log_info "  Interval: ${INTERVAL}s"
 log_info "  Restart Asterisk: $RESTART_ASTERISK"
-log_debug "Supervisor token obtained successfully"
+log_info "  Token Source: $([ -n "$MANUAL_TOKEN" ] && echo "manual" || echo "auto")"
 
 # ==================== ФУНКЦИЯ ПРОВЕРКИ ДОСТУПНОСТИ АДДОНОВ ====================
 
@@ -97,6 +126,21 @@ check_addon_availability() {
         return 0
     else
         log_error "✗ $addon_type addon ($addon_slug) not found or inaccessible"
+        return 1
+    fi
+}
+
+# ==================== ФУНКЦИЯ ПРОВЕРКИ ТОКЕНА ====================
+
+validate_token() {
+    log_debug "Validating Supervisor token..."
+    
+    if curl -s -f -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" \
+        "http://supervisor/info" >/dev/null 2>&1; then
+        log_debug "✓ Supervisor token is valid"
+        return 0
+    else
+        log_error "✗ Supervisor token is invalid or expired"
         return 1
     fi
 }
@@ -205,6 +249,12 @@ check_certificates() {
 # ==================== ОСНОВНОЙ ЦИКЛ ====================
 
 log_info "=== STARTING MAIN SYNC LOOP ==="
+
+# Проверяем валидность токена
+if ! validate_token; then
+    log_error "Supervisor token validation failed. Exiting."
+    exit 1
+fi
 
 # Проверяем доступность обоих аддонов
 if ! check_addon_availability "$SRC_ADDON" "NPM Source"; then
