@@ -17,7 +17,9 @@ boot: auto
 init: false
 hassio_api: true
 host_network: false
-
+privileged:
+  - SYS_ADMIN
+  - DAC_READ_SEARCH
 map:
   - addon_config:ro    # ← Конфиги NPM
   - ssl:rw              # ← SSL для Asterisk
