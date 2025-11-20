@@ -18,7 +18,7 @@ hassio_api: true
 host_network: false
 
 map:
-  - addons:ro    # ← Конфиги NPM
+  - addon_config:ro    # ← Конфиги NPM
   - ssl:rw              # ← SSL для Asterisk
 
 options:
